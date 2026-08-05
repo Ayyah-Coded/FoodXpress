@@ -7,12 +7,6 @@ import type { HealthCheckResponse } from "@food-xpress/types";
 export class AppController {
   constructor(@Inject('DB') private db: NodePgDatabase<typeof schema>) {}
 
-  @Get('db-test')
-  async dbTest() {
-    const result = await this.db.select().from(schema.users);
-    return { users: result, count: result.length };
-  }
-
   @Get("health")
   health(): HealthCheckResponse {
     return {
@@ -20,4 +14,4 @@ export class AppController {
       timestamp: new Date(),
     };
   }
-}
+};

@@ -19,25 +19,29 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    const [existing] = await this.db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.email, dto.email));
-
-    if (existing) throw new ConflictException('Email already in use');
-
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
-    const [user] = await this.db
-      .insert(schema.users)
-      .values({
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        email: dto.email,
-        password: hashedPassword,
-        role: dto.role,
-      })
-      .returning();
+    let user: schema.User | undefined;
+    try {
+      const [inserted] = await this.db
+        .insert(schema.users)
+        .values({
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          email: dto.email,
+          password: hashedPassword,
+          role: dto.role,
+        })
+        .returning();
+
+      user = inserted;
+    } catch (error) {
+      const err = error as { code?: string };
+      if (err?.code === '23505') {
+        throw new ConflictException('Email already in use');
+      }
+      throw error;
+    }
 
     return {
       user: this.sanitizeUser(user),
@@ -63,11 +67,11 @@ export class AuthService {
     };
   }
 
-  private generateToken(user: schema.NewUser) {
+  private generateToken(user: schema.User) {
     const payload: JwtPayload = {
-      sub: user.id!,
+      sub: user.id,
       email: user.email,
-      role: user.role!,
+      role: user.role,
     };
     return this.jwtService.sign(payload);
   }

@@ -20,6 +20,8 @@ export class RolesGuard implements CanActivate {
       .switchToHttp()
       .getRequest<Request & { user: JwtPayload }>();
 
+    if (!user) return false;
+
     return requiredRoles.includes(user.role as UserRole);
   }
 }

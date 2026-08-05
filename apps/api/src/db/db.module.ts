@@ -13,6 +13,10 @@ import { drizzle } from 'drizzle-orm/node-postgres';
           connectionString: process.env.DATABASE_URL!,
         });
 
+        pool.on('error', (error) => {
+          console.error('Unexpected PostgreSQL pool error', error);
+        });
+
         return drizzle(pool, { schema });
       },
     },
