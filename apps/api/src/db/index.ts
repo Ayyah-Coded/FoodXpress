@@ -8,4 +8,8 @@ if (!process.env.DATABASE_URL) {
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
+pool.on('error', (error) => {
+  console.error('Unexpected PostgreSQL pool error', error);
+});
+
 export const db = drizzle(pool, { schema });

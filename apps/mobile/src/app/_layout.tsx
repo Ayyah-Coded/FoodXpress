@@ -9,11 +9,11 @@ import { DarkTheme } from 'expo-router/build/react-navigation/native/theming/Dar
 import { ThemeProvider } from 'expo-router/build/react-navigation/core/theming/ThemeProvider';
 
 SplashScreen.preventAutoHideAsync();
-const colorScheme = useColorScheme();
 
 const queryClient = new QueryClient();
 
 export default function TabLayout() {
+  const colorScheme = useColorScheme();
 
   return (
     <QueryClientProvider client={queryClient}>

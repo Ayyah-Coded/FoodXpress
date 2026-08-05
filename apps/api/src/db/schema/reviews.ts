@@ -7,8 +7,7 @@ export const reviews = pgTable('reviews', {
   id: uuid('id').primaryKey().defaultRandom(),
   customerId: uuid('customer_id').notNull(),
   restaurantId: uuid('restaurant_id').notNull(),
-  orderId: uuid('order_id').notNull().unique()
-    .references(() => orders.id, { onDelete: 'cascade' }),
+  orderId: uuid('order_id').notNull().unique(),
   driverId: uuid('driver_id'),
   restaurantRating: integer('restaurant_rating').notNull(),
   driverRating: integer('driver_rating'),
@@ -35,7 +34,8 @@ export const reviews = pgTable('reviews', {
       columns: [table.orderId, table.driverId],
       foreignColumns: [orders.id, orders.driverId],
     }),
-  ]);
+  ]
+);
 
 export type Review = typeof reviews.$inferSelect;
 export type NewReview = typeof reviews.$inferInsert;
