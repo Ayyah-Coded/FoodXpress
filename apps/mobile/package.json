@@ -3,7 +3,10 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
+    "@food-xpress/types": "workspace:*",
     "@expo/ui": "~57.0.9",
+    "@tanstack/react-query": "^5.101.4",
+    "axios": "^1.19.0",
     "expo": "~57.0.10",
     "expo-constants": "~57.0.9",
     "expo-device": "~57.0.1",
