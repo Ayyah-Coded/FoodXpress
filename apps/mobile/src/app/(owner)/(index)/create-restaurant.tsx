@@ -58,7 +58,7 @@ export default function CreateRestaurantScreen() {
   });
 
   function handleSubmit() {
-    if (!name.trim() || !address || !cuisineType) {
+    if (!name.trim() || !address.trim() || !cuisineType.trim()) {
       return Alert.alert('Please fill in all required fields');
     }
     createRestaurant();
@@ -79,7 +79,7 @@ export default function CreateRestaurantScreen() {
                 'You need to grant permission to your phone',
                 [
                   { text: 'Dismiss' },
-                  { text: 'Open Settings', onPress: () => void openSettings },
+                  { text: 'Open Settings', onPress: () => void openSettings() },
                 ],
               );
             },

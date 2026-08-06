@@ -30,6 +30,7 @@ export function useOrderSocket(orderId: string | null) {
   const [orderUpdate, setOrderUpdate] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
+    setOrderUpdate(null); // reset when orderId changes
     if (!orderId) return;
 
     const s = retainSocket();
@@ -50,6 +51,7 @@ export function useOrderSocket(orderId: string | null) {
     return () => {
       s.off('order:updated', handler);
       s.off('connect', reconnectHandler);
+      s.emit('leave:order', orderId);
       releaseSocket();
     };
   }, [orderId]);
@@ -81,6 +83,7 @@ export function useRestaurantSocket(restaurantId: string | null) {
     return () => {
       s.off('order:updated', handler);
       s.off('connect', reconnectHandler);
+      s.emit('leave:restaurant', restaurantId);
       releaseSocket();
     };
   }, [restaurantId]);
@@ -95,6 +98,7 @@ export function useDriverLocationSocket(orderId: string | null) {
   } | null>(null);
 
   useEffect(() => {
+    setDriverLocation(null); // reset when orderId changes
     if (!orderId) return;
 
     const s = retainSocket();

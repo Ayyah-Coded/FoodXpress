@@ -118,12 +118,16 @@ export default function OwnerMenuScreen() {
     },
   });
 
-  const { mutate: addItem, isPending: addingItem } = useMutation({
-    mutationFn: () =>
+  const { mutate: addItem, isPending: addingItem } = useMutation<
+    void,
+    { response?: { data?: { message?: string } } },
+    { price: number }
+  >({
+    mutationFn: ({ price }) =>
       api.post('/menu/items', {
         categoryId: selectedCategoryId,
         name: newItemName,
-        price: newItemPrice,
+        price,
         imageUrl: newItemImageUrl,
       }),
     onSuccess: () => {
@@ -135,7 +139,7 @@ export default function OwnerMenuScreen() {
       setNewItemImageUrl(null);
       setShowAddItem(false);
     },
-    onError: (e: { response?: { data?: { message?: string } } }) => {
+    onError: (e) => {
       Alert.alert(
         'Error',
         e.response?.data?.message ?? 'Could not create menu item',
@@ -177,7 +181,7 @@ export default function OwnerMenuScreen() {
       return;
     };
 
-    addItem();
+    addItem({ price });
   }
 
   function closeAddItemModal() {

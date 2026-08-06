@@ -78,6 +78,15 @@ export default function OwnerAnalyticsScreen() {
 
   const isLoading = restaurantLoading || ordersLoading;
 
+  const aggregationDisplayDate = new Date(from).toLocaleDateString('en-US', {
+    timeZone: AGGREGATION_TIME_ZONE,
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  const insets = useSafeAreaInsets();
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -88,17 +97,11 @@ export default function OwnerAnalyticsScreen() {
     );
   };
 
-  const insets = useSafeAreaInsets();
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <Text style={styles.title}>Today's Summary</Text>
       <Text style={styles.date}>
-        {new Date().toLocaleDateString('en-US', {
-          weekday: 'long',
-          month: 'long',
-          day: 'numeric',
-        })}
+        {aggregationDisplayDate}
       </Text>
 
       <View style={styles.revenueCard}>

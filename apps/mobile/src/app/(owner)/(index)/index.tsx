@@ -161,7 +161,7 @@ export default function OwnerHomeScreen() {
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
-              onRefresh={() => void refetch}
+              onRefresh={() => void refetch()}
             />
           }
           ListEmptyComponent={
@@ -190,14 +190,14 @@ export default function OwnerHomeScreen() {
                         style={[
                           styles.statusBadge,
                           {
-                            backgroundColor: (STATUS_COLORS[order.status] ?? '#999') + '20',
+                            backgroundColor: (STATUS_COLORS[order.status] ?? '#999999') + '20',
                           },
                         ]}
                       >
                         <Text
                           style={[
                             styles.statusText,
-                            { color: STATUS_COLORS[order.status] ?? '#999' },
+                            { color: STATUS_COLORS[order.status] ?? '#999999' },
                           ]}
                         >
                           {order.status}
@@ -222,7 +222,7 @@ export default function OwnerHomeScreen() {
                 <View
                   style={[
                     styles.statusBadge,
-                    { backgroundColor: (STATUS_COLORS[order.status] ?? '#999') + '20' },
+                    { backgroundColor: (STATUS_COLORS[order.status] ?? '#999999') + '20' },
                   ]}
                 >
                   <Text
