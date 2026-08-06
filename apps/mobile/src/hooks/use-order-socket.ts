@@ -26,6 +26,45 @@ function releaseSocket(): void {
   }
 };
 
+const orderSubscriptions: Record<string, number> = {};
+const restaurantSubscriptions: Record<string, number> = {};
+
+function retainOrderRoom(s: Socket, orderId: string) {
+  const count = (orderSubscriptions[orderId] ?? 0) + 1;
+  orderSubscriptions[orderId] = count;
+  if (count === 1) {
+    s.emit('join:order', orderId);
+  }
+}
+
+function releaseOrderRoom(s: Socket, orderId: string) {
+  const count = Math.max((orderSubscriptions[orderId] ?? 0) - 1, 0);
+  if (count === 0) {
+    delete orderSubscriptions[orderId];
+    s.emit('leave:order', orderId);
+  } else {
+    orderSubscriptions[orderId] = count;
+  }
+}
+
+function retainRestaurantRoom(s: Socket, restaurantId: string) {
+  const count = (restaurantSubscriptions[restaurantId] ?? 0) + 1;
+  restaurantSubscriptions[restaurantId] = count;
+  if (count === 1) {
+    s.emit('join:restaurant', restaurantId);
+  }
+}
+
+function releaseRestaurantRoom(s: Socket, restaurantId: string) {
+  const count = Math.max((restaurantSubscriptions[restaurantId] ?? 0) - 1, 0);
+  if (count === 0) {
+    delete restaurantSubscriptions[restaurantId];
+    s.emit('leave:restaurant', restaurantId);
+  } else {
+    restaurantSubscriptions[restaurantId] = count;
+  }
+}
+
 export function useOrderSocket(orderId: string | null) {
   const [orderUpdate, setOrderUpdate] = useState<Record<string, unknown> | null>(null);
 
@@ -35,7 +74,7 @@ export function useOrderSocket(orderId: string | null) {
 
     const s = retainSocket();
     if (!s.connected) s.connect();
-    s.emit('join:order', orderId); // tell server to put us in order:<orderId> room
+    retainOrderRoom(s, orderId);
 
     const handler = (data: { id?: string }) => {
       if (data.id === orderId) setOrderUpdate(data);
@@ -51,7 +90,7 @@ export function useOrderSocket(orderId: string | null) {
     return () => {
       s.off('order:updated', handler);
       s.off('connect', reconnectHandler);
-      s.emit('leave:order', orderId);
+      releaseOrderRoom(s, orderId);
       releaseSocket();
     };
   }, [orderId]);
@@ -67,7 +106,7 @@ export function useRestaurantSocket(restaurantId: string | null) {
 
     const s = retainSocket();
     if (!s.connected) s.connect();
-    s.emit('join:restaurant', restaurantId);
+    retainRestaurantRoom(s, restaurantId);
 
     const handler = () => {
       setUpdateCount((count) => count + 1);
@@ -83,7 +122,7 @@ export function useRestaurantSocket(restaurantId: string | null) {
     return () => {
       s.off('order:updated', handler);
       s.off('connect', reconnectHandler);
-      s.emit('leave:restaurant', restaurantId);
+      releaseRestaurantRoom(s, restaurantId);
       releaseSocket();
     };
   }, [restaurantId]);
@@ -103,7 +142,7 @@ export function useDriverLocationSocket(orderId: string | null) {
 
     const s = retainSocket();
     if (!s.connected) s.connect();
-    s.emit('join:order', orderId);
+    retainOrderRoom(s, orderId);
 
     const handler = (data: { latitude: number; longitude: number }) => {
       setDriverLocation({
@@ -122,9 +161,10 @@ export function useDriverLocationSocket(orderId: string | null) {
     return () => {
       s.off('driver:location', handler);
       s.off('connect', reconnectHandler);
+      releaseOrderRoom(s, orderId);
       releaseSocket();
     };
   }, [orderId]);
 
   return driverLocation;
-}
+};

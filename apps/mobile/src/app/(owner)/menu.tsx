@@ -123,13 +123,14 @@ export default function OwnerMenuScreen() {
     { response?: { data?: { message?: string } } },
     { price: number }
   >({
-    mutationFn: ({ price }) =>
-      api.post('/menu/items', {
+    mutationFn: async ({ price }) => {
+      await api.post('/menu/items', {
         categoryId: selectedCategoryId,
         name: newItemName,
         price,
         imageUrl: newItemImageUrl,
-      }),
+      });
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ['menu-items', restaurant?.id],

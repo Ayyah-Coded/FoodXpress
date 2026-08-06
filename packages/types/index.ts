@@ -24,7 +24,7 @@ export interface JwtPayload {
   sub: string;
   email: string;
   role: string;
-}
+};
 
 export interface RestaurantType {
   id: string;
@@ -38,14 +38,14 @@ export interface RestaurantType {
   rating: string;
   createdAt: string;
   updatedAt: string;
-}
+};
 
 export interface MenuCategory {
   id: string;
   restaurantId: string;
   name: string;
   createdAt: string;
-}
+};
 
 export interface MenuItem {
   id: string;
@@ -58,7 +58,7 @@ export interface MenuItem {
   isAvailable: boolean;
   createdAt: string;
   updatedAt: string;
-}
+};
 
 export interface Order {
   id: string;
@@ -72,7 +72,16 @@ export interface Order {
   items?: { id: string }[];
   createdAt: string;
   updatedAt: string;
-}
+};
+
+export interface OrderItem {
+  id: string;
+  orderId: string;
+  menuItemId: string;
+  quantity: string;
+  unitPrice: string;
+  createdAt: Date;
+};
 
 export const OrderStatus = {
   PENDING: 'PENDING',
@@ -85,3 +94,20 @@ export const OrderStatus = {
 } as const;
 
 export type OrderStatus = typeof OrderStatus[keyof typeof OrderStatus];
+
+export interface CartItem {
+  id: string;          // menuItem id
+  name: string;
+  price: string;
+  imageUrl: string | null;
+  restaurantId: string;
+  restaurantName: string;
+  quantity: number;
+};
+
+
+export interface RestaurantWithMenu {
+  restaurant: RestaurantType;
+  categories: MenuCategory[];
+  items: MenuItem[];
+};
