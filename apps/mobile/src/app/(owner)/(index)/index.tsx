@@ -57,7 +57,10 @@ export default function OwnerHomeScreen() {
   });
 
   const { mutate: toggleOpen } = useMutation({
-    mutationFn: () => api.patch(`/restaurants/${restaurant?.id}`, { isOpen: !restaurant?.isOpen }),
+    mutationFn: () => {
+      if (!restaurant) throw new Error('Restaurant not loaded');
+      return api.patch(`/restaurants/${restaurant?.id}`, { isOpen: !restaurant?.isOpen });
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my-restaurant'] }),
   });
 
@@ -77,7 +80,7 @@ export default function OwnerHomeScreen() {
     if (!restaurant) {
       router.replace('/(owner)/(index)/create-restaurant');
     }
-  }, [restaurant, isLoading, isFetching]);
+  }, [restaurant, isLoading]);
 
   if (isLoading) {
     return (
@@ -158,7 +161,7 @@ export default function OwnerHomeScreen() {
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
-              onRefresh={void refetch}
+              onRefresh={() => void refetch}
             />
           }
           ListEmptyComponent={
@@ -187,14 +190,14 @@ export default function OwnerHomeScreen() {
                         style={[
                           styles.statusBadge,
                           {
-                            backgroundColor: STATUS_COLORS[order.status] + '20',
+                            backgroundColor: (STATUS_COLORS[order.status] ?? '#999') + '20',
                           },
                         ]}
                       >
                         <Text
                           style={[
                             styles.statusText,
-                            { color: STATUS_COLORS[order.status] },
+                            { color: STATUS_COLORS[order.status] ?? '#999' },
                           ]}
                         >
                           {order.status}
@@ -219,13 +222,13 @@ export default function OwnerHomeScreen() {
                 <View
                   style={[
                     styles.statusBadge,
-                    { backgroundColor: STATUS_COLORS[order.status] + '20' },
+                    { backgroundColor: (STATUS_COLORS[order.status] ?? '#999') + '20' },
                   ]}
                 >
                   <Text
                     style={[
                       styles.statusText,
-                      { color: STATUS_COLORS[order.status] },
+                      { color: STATUS_COLORS[order.status] ?? '#999' },
                     ]}
                   >
                     {order.status}

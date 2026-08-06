@@ -48,16 +48,19 @@ export default function EditRestaurantScreen() {
   });
 
   const { mutate: updateRestaurant, isPending } = useMutation({
-    mutationFn: () =>
-      api.patch(`/restaurants/${restaurant?.id}`, {
+    mutationFn: () => {
+      if (!restaurant) throw new Error('Restaurant not loaded');
+
+      return api.patch(`/restaurants/${restaurant.id}`, {
         name,
         description,
         address,
         cuisineType,
         imageUrl,
-      }),
+      });
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-restaurant'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-restaurant'] });
       router.back();
     },
     onError: (e: any) => {
@@ -67,6 +70,14 @@ export default function EditRestaurantScreen() {
       );
     },
   });
+
+  function handleSubmit() {
+    if (!name.trim() || !address.trim() || !cuisineType.trim()) {
+      Alert.alert('Please fill in all required fields');
+      return;
+    }
+    updateRestaurant();
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -132,8 +143,8 @@ export default function EditRestaurantScreen() {
 
       <Pressable
         style={styles.button}
-        onPress={() => updateRestaurant()}
-        disabled={isPending || isUploading}
+        onPress={handleSubmit}
+        disabled={isPending || isUploading || !restaurant}
       >
         {isPending ? (
           <ActivityIndicator color="#fff" />

@@ -2,10 +2,8 @@ import { useMemo } from 'react';
 import { api } from '@/lib/axios';
 import { useQuery } from '@tanstack/react-query';
 import { Order, RestaurantType } from '@food-xpress/types';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
-
-type RestaurantOrder = Order & { items: { id: string }[] };
 
 const STATUS_COLORS: Record<string, string> = {
   CONFIRMED: '#3B82F6',
@@ -16,6 +14,36 @@ const STATUS_COLORS: Record<string, string> = {
   CANCELLED: '#EF4444',
 };
 
+const AGGREGATION_TIME_ZONE = 'UTC';
+
+function getAggregationDayRange(timeZone: string) {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+    .formatToParts(now)
+    .reduce<Record<string, string>>((acc, part) => {
+      if (part.type !== 'literal') acc[part.type] = part.value;
+      return acc;
+    }, {});
+
+  const year = Number(parts.year);
+  const month = Number(parts.month);
+  const day = Number(parts.day);
+
+  const from = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0)).toISOString();
+  const to = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999)).toISOString();
+
+  return { from, to };
+}
+
 export default function OwnerAnalyticsScreen() {
   const { data: restaurant, isLoading: restaurantLoading } =
     useQuery<RestaurantType | null>({
@@ -23,32 +51,30 @@ export default function OwnerAnalyticsScreen() {
       queryFn: () => api.get<RestaurantType | null>('/restaurants/mine').then((r) => r.data),
     });
 
-  const { data: allOrders = [], isLoading: ordersLoading } = useQuery<RestaurantOrder[]>({
-    queryKey: ['restaurant-orders'],
-    queryFn: () => api.get<RestaurantOrder[]>('/orders/restaurant').then((r) => r.data),
+  const { from, to } = getAggregationDayRange(AGGREGATION_TIME_ZONE);
+
+  const { data: orders = [], isLoading: ordersLoading } = useQuery<Order[]>({
+    queryKey: ['restaurant-orders', from, to],
+    queryFn: () => api
+      .get<Order[]>(`/orders/restaurant?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+      .then((r) => r.data),
     enabled: !!restaurant,
   });
 
-  // filter to today's orders only — compared on the frontend
-  const todayOrders = useMemo(() => {
-    const today = new Date().toDateString();
-    return allOrders.filter(
-      (o) => new Date(o.createdAt).toDateString() === today,
-    );
-  }, [allOrders]);
-
-  const totalRevenue = todayOrders
-    .filter((o) => o.status !== 'CANCELLED')
-    .reduce((sum, o) => sum + Number(o.totalAmount), 0)
-    .toFixed(2);
+  const totalRevenue = useMemo(() => {
+    return orders
+      .filter((o) => o.status !== 'CANCELLED')
+      .reduce((sum, o) => sum + Number(o.totalAmount), 0)
+      .toFixed(2);
+  }, [orders]);
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    todayOrders.forEach((o) => {
+    orders.forEach((o) => {
       counts[o.status] = (counts[o.status] ?? 0) + 1;
     });
     return counts;
-  }, [todayOrders]);
+  }, [orders]);
 
   const isLoading = restaurantLoading || ordersLoading;
 
@@ -60,7 +86,9 @@ export default function OwnerAnalyticsScreen() {
         </View>
       </SafeAreaView>
     );
-  }
+  };
+
+  const insets = useSafeAreaInsets();
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -76,7 +104,7 @@ export default function OwnerAnalyticsScreen() {
       <View style={styles.revenueCard}>
         <View style={styles.revenueRow}>
           <View style={styles.revenueItem}>
-            <Text style={styles.revenueValue}>{todayOrders.length}</Text>
+            <Text style={styles.revenueValue}>{orders.length}</Text>
             <Text style={styles.revenueLabel}>Orders</Text>
           </View>
           <View style={styles.revenueDivider} />
@@ -104,15 +132,18 @@ export default function OwnerAnalyticsScreen() {
         </View>
       )}
 
-      {todayOrders.length === 0 ? (
+      {orders.length === 0 ? (
         <View style={styles.centered}>
           <Text style={styles.emptyText}>No orders today yet</Text>
         </View>
       ) : (
         <FlatList
-          data={todayOrders}
+          data={orders}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[
+            styles.list,
+            { paddingBottom: insets.bottom + 88 },
+          ]}
           renderItem={({ item }) => (
             <View style={styles.orderCard}>
               <View style={styles.orderHeader}>
@@ -139,15 +170,14 @@ export default function OwnerAnalyticsScreen() {
                 </View>
               </View>
               <Text style={styles.orderItems}>
-                {item.items.length} item{item.items.length !== 1 ? 's' : ''}
+                {item.items?.length ?? 0} item{(item.items?.length ?? 0) !== 1 ? 's' : ''}
               </Text>
               <Text style={styles.orderTotal}>
                 ${Number(item.totalAmount).toFixed(2)}
               </Text>
             </View>
           )}
-        />
-      )}
+        />)}
     </SafeAreaView>
   );
 }

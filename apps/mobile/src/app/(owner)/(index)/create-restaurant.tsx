@@ -2,6 +2,7 @@ import { SetStateAction, useState } from 'react';
 import { api } from '@/lib/axios';
 import { router } from 'expo-router';
 import { openSettings } from 'expo-linking';
+import { RestaurantType } from '@food-xpress/types';
 import { useImageUploader } from '@/lib/uploadthing';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -20,8 +21,14 @@ export default function CreateRestaurantScreen() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
 
   const { openImagePicker, isUploading } = useImageUploader('restaurantImage', {
-    onClientUploadComplete: (res: { ufsUrl: SetStateAction<string | null>; }[]) => {
-      setImageUrl(res[0].ufsUrl);
+    onClientUploadComplete: (res) => {
+      const uploadedFile = res?.[0]?.fileUrl;
+      if (!uploadedFile) {
+        Alert.alert('Upload failed', 'No uploaded file was returned.');
+        return;
+      }
+
+      setImageUrl(uploadedFile);
       Alert.alert('Image uploaded successfully');
     },
     onUploadError: (error: { message: string | undefined; }) => {
@@ -31,15 +38,15 @@ export default function CreateRestaurantScreen() {
 
   const { mutate: createRestaurant, isPending } = useMutation({
     mutationFn: () =>
-      api.post('/restaurants', {
+      api.post<RestaurantType>('/restaurants', {
         name,
         description,
         address,
         cuisineType,
         imageUrl,
-      }),
+      }).then((res) => res.data),
     onSuccess: (restaurant) => {
-      void queryClient.setQueryData(['my-restaurant'], restaurant);
+      queryClient.setQueryData(['my-restaurant'], restaurant);
       router.replace('/(owner)/(index)');
     },
     onError: (e: any) => {
@@ -51,7 +58,7 @@ export default function CreateRestaurantScreen() {
   });
 
   function handleSubmit() {
-    if (!name || !address || !cuisineType) {
+    if (!name.trim() || !address || !cuisineType) {
       return Alert.alert('Please fill in all required fields');
     }
     createRestaurant();
@@ -72,7 +79,7 @@ export default function CreateRestaurantScreen() {
                 'You need to grant permission to your phone',
                 [
                   { text: 'Dismiss' },
-                  { text: 'Open Settings', onPress: void openSettings },
+                  { text: 'Open Settings', onPress: () => void openSettings },
                 ],
               );
             },

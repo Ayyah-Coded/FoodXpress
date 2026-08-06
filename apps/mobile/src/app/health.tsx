@@ -19,7 +19,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Food Delivery</Text>
-      <Text style={styles.subtitle}>Connection Text</Text>
+      <Text style={styles.subtitle}>Connection Test</Text>
 
       {isLoading && <ActivityIndicator size="large" color="#ff6b35" />}
 

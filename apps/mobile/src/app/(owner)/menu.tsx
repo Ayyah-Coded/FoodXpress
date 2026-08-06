@@ -1,4 +1,4 @@
-import { SetStateAction, useState } from 'react';
+import { SetStateAction, useMemo, useState } from 'react';
 import { api } from '@/lib/axios';
 import { openSettings } from 'expo-linking';
 import { useImageUploader } from '@/lib/uploadthing';
@@ -26,7 +26,6 @@ export default function OwnerMenuScreen() {
   const {
     data: restaurant,
     isPending: restaurantPending,
-    isFetching: restaurantFetching,
   } = useQuery<RestaurantType | null>({
     queryKey: ['my-restaurant'],
     queryFn: () =>
@@ -36,7 +35,6 @@ export default function OwnerMenuScreen() {
   const {
     data: categories = [],
     isPending: categoriesPending,
-    isFetching: categoriesFetching,
   } = useQuery<MenuCategory[]>({
     queryKey: ['categories', restaurant?.id],
     queryFn: () => api
@@ -45,14 +43,22 @@ export default function OwnerMenuScreen() {
     enabled: !!restaurant?.id,
   });
 
-  const restaurantLoading = restaurantPending || restaurantFetching;
-  const categoriesLoading = !!restaurant?.id && (categoriesPending || categoriesFetching);
+  const restaurantLoading = restaurantPending;
+  const categoriesLoading = !!restaurant?.id && categoriesPending;
 
   const { data: items = [] } = useQuery<MenuItem[]>({
     queryKey: ['menu-items', restaurant?.id],
     queryFn: () => api.get<MenuItem[]>(`/menu/items/${restaurant?.id}`).then((r) => r.data),
     enabled: !!restaurant?.id,
   });
+
+  const categoryItemsById = useMemo(
+    () => items.reduce<Record<string, MenuItem[]>>((acc, item) => {
+      (acc[item.categoryId] ??= []).push(item);
+      return acc;
+    }, {}),
+    [items],
+  );
 
   const { mutate: addCategory, isPending: addingCategory } = useMutation({
     mutationFn: (name: string) => api.post('/menu/categories', { name }),
@@ -154,15 +160,23 @@ export default function OwnerMenuScreen() {
 
   function handleAddItem() {
     const name = newItemName.trim();
-    const price = newItemPrice.trim();
-    if (!name || !price) {
+    const price = Number(newItemPrice.trim());
+
+    if (!name || isNaN(price)) {
       Alert.alert('Required fields', 'Item name and price are required.');
       return;
+    };
+
+    if (!Number.isFinite(price) || price <= 0) {
+      Alert.alert('Invalid price', 'Enter a price greater than 0.');
+      return;
     }
+
     if (!selectedCategoryId) {
       Alert.alert('Error', 'No category selected.');
       return;
-    }
+    };
+
     addItem();
   }
 
@@ -179,6 +193,12 @@ export default function OwnerMenuScreen() {
       queryClient.invalidateQueries({
         queryKey: ['menu-items', restaurant?.id],
       }),
+    onError: (e: { response?: { data?: { message?: string } } }) => {
+      Alert.alert(
+        'Error',
+        e.response?.data?.message ?? 'Could not delete menu item',
+      );
+    }
   });
 
   if (restaurantLoading || categoriesLoading) {
@@ -217,9 +237,7 @@ export default function OwnerMenuScreen() {
         data={categories}
         keyExtractor={(item) => item.id}
         renderItem={({ item: category }) => {
-          const categoryItems = items.filter(
-            (i) => i.categoryId === category.id,
-          );
+          const categoryItems = categoryItemsById[category.id] ?? [];
           return (
             <View style={styles.categoryBlock}>
               <View style={styles.categoryHeader}>

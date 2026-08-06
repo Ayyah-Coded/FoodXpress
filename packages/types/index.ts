@@ -36,15 +36,15 @@ export interface RestaurantType {
   cuisineType: string;
   isOpen: boolean;
   rating: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface MenuCategory {
   id: string;
   restaurantId: string;
   name: string;
-  createdAt: Date;
+  createdAt: string;
 }
 
 export interface MenuItem {
@@ -56,8 +56,8 @@ export interface MenuItem {
   price: string;
   imageUrl: string | null;
   isAvailable: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Order {
@@ -69,8 +69,9 @@ export interface Order {
   totalAmount: string;
   deliveryAddress: string;
   stripePaymentIntentId: string | null;
-  createdAt: Date;
-  updatedAt: Date;
+  items?: { id: string }[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export const OrderStatus = {
