@@ -48,7 +48,14 @@ export const useCartStore = create<CartStore>((set: (arg0: { items: any; restaur
     });
   },
 
-  removeItem: (id: any) => set({ items: get().items.filter((i: { id: any; }) => i.id !== id) }),
+  removeItem: (id: any) => {
+    const items = get().items.filter((item: { id: any }) => item.id !== id);
+    set(
+      items.length
+        ? { items }
+        : { items, restaurantId: null, restaurantName: null },
+    );
+  },
 
   incrementItem: (id: any) =>
     set({

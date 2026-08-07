@@ -58,7 +58,7 @@ function OrderCard({ order, onPress }: { order: OrderWithRestaurant; onPress: ()
 }
 
 export default function CustomerOrdersScreen() {
-  const { data: orders = [], isLoading } = useQuery<OrderWithRestaurant[]>({
+  const { data: orders = [], isLoading, isError, refetch } = useQuery<OrderWithRestaurant[]>({
     queryKey: ['my-orders'],
     queryFn: () => api.get<OrderWithRestaurant[]>('/orders/mine').then((r) => r.data),
   });
@@ -77,7 +77,14 @@ export default function CustomerOrdersScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <Text style={styles.title}>My Orders</Text>
 
-      {orders.length === 0 ? (
+      {isError ? (
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>Failed to load orders.</Text>
+          <Pressable style={styles.retryButton} onPress={() => refetch()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : orders.length === 0 ? (
         <View style={styles.centered}>
           <Text style={styles.emptyText}>No orders yet</Text>
           <Text style={styles.emptySubText}>
@@ -178,5 +185,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#999',
     textAlign: 'center',
+  },
+  errorText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#EF4444',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#FF6B35',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: '700',
   },
 });

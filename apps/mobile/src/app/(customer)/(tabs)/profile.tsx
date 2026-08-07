@@ -16,11 +16,11 @@ export default function ProfileScreen() {
 
       <Pressable
         style={styles.logoutButton}
+        accessibilityRole="button"
         onPress={() => { void logout() }}
       >
         <Text style={styles.logoutText}>Logout</Text>
-      </Pressable>
-    </View>
+      </Pressable>    </View>
   );
 };
 

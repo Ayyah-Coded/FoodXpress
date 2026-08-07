@@ -33,6 +33,7 @@ interface RatingModalProps {
   }) => void;
   onDismiss: () => void;
   isSubmitting: boolean;
+  errorMessage?: string | null;
 };
 
 export function RatingModal({
@@ -41,6 +42,7 @@ export function RatingModal({
   onSubmit,
   onDismiss,
   isSubmitting,
+  errorMessage,
 }: RatingModalProps) {
   const [restaurantRating, setRestaurantRating] = useState(0);
   const [driverRating, setDriverRating] = useState(0);
@@ -107,6 +109,10 @@ export function RatingModal({
               <Text style={styles.submitButtonText}>Submit Review</Text>
             )}
           </Pressable>
+
+          {errorMessage ? (
+            <Text style={styles.errorText}>{errorMessage}</Text>
+          ) : null}
 
           <Pressable style={styles.skipButton} onPress={onDismiss}>
             <Text style={styles.skipText}>Skip for now</Text>
@@ -190,5 +196,11 @@ const styles = StyleSheet.create({
   skipText: {
     fontSize: 14,
     color: '#aaa',
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 12,
   },
 });

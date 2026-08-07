@@ -53,9 +53,16 @@ export default function CustomerHomeScreen() {
           renderItem={({ item }) => (
             <Pressable
               style={styles.card}
-              onPress={() =>
-                router.push(`/(customer)/(tabs)/(home)/restaurant/${item.id}`)
+              onPress={
+                item.isOpen
+                  ? () =>
+                    router.push(
+                      `/(customer)/(tabs)/(home)/restaurant/${item.id}`
+                    )
+                  : undefined
               }
+              disabled={!item.isOpen}
+              accessibilityState={{ disabled: !item.isOpen }}
             >
               {item.imageUrl ? (
                 <Image
@@ -79,8 +86,20 @@ export default function CustomerHomeScreen() {
                   ) : (
                     <Text style={styles.noRating}>New</Text>
                   )}
-                  <View style={styles.openBadge}>
-                    <Text style={styles.openBadgeText}>Open</Text>
+                  <View
+                    style={[
+                      styles.openBadge,
+                      item.isOpen ? styles.openBadgeOpen : styles.openBadgeClosed,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.openBadgeText,
+                        !item.isOpen && styles.openBadgeTextClosed,
+                      ]}
+                    >
+                      {item.isOpen ? 'Open' : 'Closed'}
+                    </Text>
                   </View>
                 </View>
               </View>
@@ -171,15 +190,23 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   openBadge: {
-    backgroundColor: '#DCFCE7',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 8,
+  },
+  openBadgeOpen: {
+    backgroundColor: '#DCFCE7',
+  },
+  openBadgeClosed: {
+    backgroundColor: '#FEE2E2',
   },
   openBadgeText: {
     fontSize: 12,
     color: '#16A34A',
     fontWeight: '600',
+  },
+  openBadgeTextClosed: {
+    color: '#B91C1C',
   },
   ratingBadge: {
     flexDirection: 'row',

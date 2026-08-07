@@ -38,6 +38,11 @@ export default function RestaurantDetailScreen() {
   function handleAddItem(item: MenuItem) {
     if (!restaurant) return;
 
+    if (!restaurant.isOpen) {
+      Alert.alert('Restaurant closed', 'This restaurant is not accepting orders.');
+      return;
+    };
+
     // different restaurant in cart — confirm before clearing
     if (restaurantId && restaurantId !== item.restaurantId) {
       Alert.alert(

@@ -39,6 +39,8 @@ export default function OrderConfirmationScreen() {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
+  const [reviewStatus, setReviewStatus] = useState<'pending' | 'reviewed' | 'unreviewed'>('pending');
+  const [reviewSubmitError, setReviewSubmitError] = useState<string | null>(null);
 
   const [cachedDriverLocation, setCachedDriverLocation] = useState<{
     latitude: number;
@@ -59,6 +61,7 @@ export default function OrderConfirmationScreen() {
   const {
     data: order,
     isLoading,
+    isError,
     refetch,
   } = useQuery<Order & { items: any[] }>({
     queryKey: ['order', id],
@@ -69,20 +72,32 @@ export default function OrderConfirmationScreen() {
 
   useEffect(() => {
     if (!id || order?.status !== 'DELIVERED') return;
+
     api
       .get<{ reviewed: boolean }>(`/reviews/order/${id}/status`)
       .then((r) => {
-        if (r.data.reviewed) setRatingSubmitted(true);
+        if (r.data.reviewed) {
+          setRatingSubmitted(true);
+          setReviewStatus('reviewed');
+        } else {
+          setReviewStatus('unreviewed');
+        }
       })
-      .catch(() => {});
+      .catch(() => {
+        setReviewStatus('pending');
+      });
   }, [id, order?.status]);
 
   useEffect(() => {
-    if (order?.status === 'DELIVERED' && !ratingSubmitted) {
+    if (
+      order?.status === 'DELIVERED' &&
+      !ratingSubmitted &&
+      reviewStatus === 'unreviewed'
+    ) {
       const timer = setTimeout(() => setShowRatingModal(true), 1200);
       return () => clearTimeout(timer);
     }
-  }, [order?.status, ratingSubmitted]);
+  }, [order?.status, ratingSubmitted, reviewStatus]);
 
   const { mutate: submitReview, isPending: isSubmittingReview } = useMutation({
     mutationFn: (data: {
@@ -93,11 +108,13 @@ export default function OrderConfirmationScreen() {
     onSuccess: () => {
       setShowRatingModal(false);
       setRatingSubmitted(true);
+      setReviewSubmitError(null);
       queryClient.invalidateQueries({ queryKey: ['restaurants'] });
     },
-    onError: () => {
-      setShowRatingModal(false);
-      setRatingSubmitted(true);
+    onError: (error: any) => {
+      setReviewSubmitError(
+        error?.response?.data?.message ?? 'Failed to submit your review. Please try again.',
+      );
     },
   });
 
@@ -184,25 +201,73 @@ export default function OrderConfirmationScreen() {
     );
   }
 
+  if (isError) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>Failed to load order details.</Text>
+          <Pressable style={styles.retryButton} onPress={() => refetch()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   const currentIndex = STATUS_ORDER.indexOf(order?.status ?? '');
+
+  const headerEmoji =
+    order?.status === 'CONFIRMED'
+      ? '✅'
+      : order?.status === 'PREPARING'
+        ? '👨‍🍳'
+        : order?.status === 'READY'
+          ? '📦'
+          : order?.status === 'PICKED_UP'
+            ? '🛵'
+            : order?.status === 'DELIVERED'
+              ? '🎉'
+              : order?.status === 'CANCELLED'
+                ? '❌'
+                : '🕒';
+
+  const headerTitle =
+    order?.status === 'CONFIRMED'
+      ? 'Order Confirmed!'
+      : order?.status === 'PREPARING'
+        ? 'Order is Preparing'
+        : order?.status === 'READY'
+          ? 'Ready for Pickup'
+          : order?.status === 'PICKED_UP'
+            ? 'Driver Picked Up'
+            : order?.status === 'DELIVERED'
+              ? 'Order Delivered!'
+              : order?.status === 'CANCELLED'
+                ? 'Order Cancelled'
+                : 'Order Placed!';
+
+  const headerSubtitle =
+    order?.status === 'CONFIRMED'
+      ? 'Your payment was successful'
+      : order?.status === 'PREPARING'
+        ? 'Your meal is being prepared'
+        : order?.status === 'READY'
+          ? 'Your order is ready to be picked up'
+          : order?.status === 'PICKED_UP'
+            ? 'Your driver is on the way'
+            : order?.status === 'DELIVERED'
+              ? 'Enjoy your meal!'
+              : order?.status === 'CANCELLED'
+                ? 'This order has been cancelled.'
+                : 'Complete your payment below';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.content}>
-          <Text style={styles.emoji}>
-            {order?.status === 'CONFIRMED' ? '✅' : '🎉'}
-          </Text>
-          <Text style={styles.title}>
-            {order?.status === 'CONFIRMED'
-              ? 'Order Confirmed!'
-              : 'Order Placed!'}
-          </Text>
-          <Text style={styles.subtitle}>
-            {order?.status === 'CONFIRMED'
-              ? 'Your payment was successful'
-              : 'Complete your payment below'}
-          </Text>
+          <Text style={styles.emoji}>{headerEmoji}</Text>
+          <Text style={styles.title}>{headerTitle}</Text>
+          <Text style={styles.subtitle}>{headerSubtitle}</Text>
 
           <View style={styles.card}>
             <Text style={styles.label}>Order ID</Text>
@@ -331,8 +396,10 @@ export default function OrderConfirmationScreen() {
           onDismiss={() => {
             setShowRatingModal(false);
             setRatingSubmitted(true);
+            setReviewSubmitError(null);
           }}
           isSubmitting={isSubmittingReview}
+          errorMessage={reviewSubmitError}
         />
       </ScrollView>
     </SafeAreaView>
@@ -405,6 +472,23 @@ const styles = StyleSheet.create({
   payButtonText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: '700',
+  },
+  errorText: {
+    fontSize: 18,
+    color: '#EF4444',
+    fontWeight: '700',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#FF6B35',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  retryButtonText: {
+    color: '#fff',
     fontWeight: '700',
   },
   homeButton: {
