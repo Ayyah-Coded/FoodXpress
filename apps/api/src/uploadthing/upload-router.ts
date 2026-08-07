@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/only-throw-error -- UploadThingError extends Micro.Error (which extends Error), but the type-aware rule can't trace through the effect library's complex types. */
 import { JwtPayload, UserRole } from '@food-xpress/types';
 import { createUploadthing, type FileRouter } from 'uploadthing/express';
 import { UploadThingError } from 'uploadthing/server';
@@ -35,7 +34,7 @@ export const uploadRouter: FileRouter = {
       if (!secret) {
         throw new UploadThingError({
           code: 'INVALID_SERVER_CONFIG',
-          message: 'Server misconfiguration: JWT secret missing',
+          message: 'Upload service is unavailable',
         });
       }
 
@@ -53,7 +52,11 @@ export const uploadRouter: FileRouter = {
         }
 
         return { uploadedBy: payload.sub };
-      } catch {
+      } catch (error) {
+        if (error instanceof UploadThingError) {
+          throw error;
+        }
+
         throw new UploadThingError({
           code: 'FORBIDDEN',
           message: 'Invalid or expired token',
@@ -94,7 +97,7 @@ export const uploadRouter: FileRouter = {
       if (!secret) {
         throw new UploadThingError({
           code: 'INVALID_SERVER_CONFIG',
-          message: 'Server misconfiguration: JWT secret missing',
+          message: 'Upload service is unavailable',
         });
       }
 

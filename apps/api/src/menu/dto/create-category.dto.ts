@@ -3,7 +3,7 @@ import { IsNotEmpty, IsString, MinLength } from 'class-validator';
 
 
 export class CreateCategoryDto {
-  @Transform(({ value }: { value: string }) => value.trim())
+  @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value)
   @IsString()
   @IsNotEmpty()
   @MinLength(2)

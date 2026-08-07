@@ -104,7 +104,18 @@ export class MenuService {
   async createItem(ownerId: string, dto: CreateMenuItemDto) {
     const restaurant = await this.getRestaurantByOwner(ownerId);
 
-    if (!restaurant) throw new NotFoundException('Create a restaurant first');
+    const [category] = await this.db
+      .select()
+      .from(schema.menuCategories)
+      .where(eq(schema.menuCategories.id, dto.categoryId));
+
+    if (!category) throw new NotFoundException('Category not found');
+
+    if (category.restaurantId !== restaurant.id) {
+      throw new ForbiddenException(
+        'This category does not belong to your restaurant',
+      );
+    }
 
     const [item] = await this.db
       .insert(schema.menuItems)
@@ -145,6 +156,21 @@ export class MenuService {
       throw new ForbiddenException(
         'This item does not belong to your restaurant',
       );
+    }
+
+    if (dto.categoryId !== undefined) {
+      const [category] = await this.db
+        .select()
+        .from(schema.menuCategories)
+        .where(eq(schema.menuCategories.id, dto.categoryId));
+
+      if (!category) throw new NotFoundException('Category not found');
+
+      if (category.restaurantId !== restaurant.id) {
+        throw new ForbiddenException(
+          'This category does not belong to your restaurant',
+        );
+      }
     }
 
     const [updated] = await this.db

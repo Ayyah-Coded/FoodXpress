@@ -1,4 +1,5 @@
-import { IsBoolean, IsNumberString, IsOptional, IsString, IsUUID } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsBoolean, IsNotEmpty, IsNumberString, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 
 
 export class UpdateMenuItemDto {
@@ -6,8 +7,10 @@ export class UpdateMenuItemDto {
   @IsOptional()
   categoryId?: string;
 
+  @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value)
   @IsString()
-  @IsOptional()
+  @IsNotEmpty()
+  @MinLength(2)
   name?: string;
 
   @IsString()
