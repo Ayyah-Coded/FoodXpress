@@ -4,9 +4,10 @@ import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
+import { RestaurantsModule } from './restaurant/restaurants.module';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), DbModule, AuthModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), DbModule, AuthModule, RestaurantsModule],
   controllers: [AppController],
   providers: [AppService],
 })

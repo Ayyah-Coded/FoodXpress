@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { AccessibilityInfo, ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 
 
@@ -47,6 +47,12 @@ export function RatingModal({
   const [restaurantRating, setRestaurantRating] = useState(0);
   const [driverRating, setDriverRating] = useState(0);
   const [comment, setComment] = useState('');
+
+  useEffect(() => {
+    if (errorMessage) {
+      AccessibilityInfo.announceForAccessibility(errorMessage);
+    }
+  }, [errorMessage]);
 
   const canSubmit = restaurantRating > 0 && (!hasDriver || driverRating > 0);
 
@@ -109,10 +115,6 @@ export function RatingModal({
               <Text style={styles.submitButtonText}>Submit Review</Text>
             )}
           </Pressable>
-
-          {errorMessage ? (
-            <Text style={styles.errorText}>{errorMessage}</Text>
-          ) : null}
 
           <Pressable style={styles.skipButton} onPress={onDismiss}>
             <Text style={styles.skipText}>Skip for now</Text>

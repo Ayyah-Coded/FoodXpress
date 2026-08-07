@@ -71,7 +71,12 @@ export const useCartStore = create<CartStore>((set: (arg0: { items: any; restaur
 
     if (item.quantity === 1) {
       // remove item when quantity reaches 0
-      set({ items: items.filter((i: { id: any; }) => i.id !== id) });
+      const remainingItems = items.filter((i: { id: any; }) => i.id !== id);
+      set(
+        remainingItems.length
+          ? { items: remainingItems }
+          : { items: remainingItems, restaurantId: null, restaurantName: null },
+      );
     } else {
       set({
         items: items.map((i: { id: any; quantity: number; }) =>
