@@ -24,19 +24,44 @@ export class RestaurantsService {
       throw new ForbiddenException('You already have a restaurant');
     }
 
-    const [restaurant] = await this.db
-      .insert(schema.restaurants)
-      .values({
-        ownerId,
-        name: dto.name,
-        description: dto.description,
-        address: dto.address,
-        cuisineType: dto.cuisineType,
-        imageUrl: dto.imageUrl,
-      })
-      .returning();
+    try {
+      const [restaurant] = await this.db
+        .insert(schema.restaurants)
+        .values({
+          ownerId,
+          name: dto.name,
+          description: dto.description,
+          address: dto.address,
+          cuisineType: dto.cuisineType,
+          imageUrl: dto.imageUrl,
+        })
+        .returning();
 
-    return restaurant;
+      return restaurant;
+    } catch (err: any) {
+      // Postgres unique violation
+      // code 23505 indicates unique constraint violation
+      if (err?.code === '23505') {
+        const constraint = (err?.constraint ?? err?.detail ?? '').toString();
+
+        // Recognize known constraint names (DB-generated or explicitly named)
+        const knownOwnerConstraints = [
+          'restaurants_owner_id_key',
+          'restaurants_owner_id_unique',
+          'unique_restaurants_owner_id',
+        ];
+
+        if (
+          knownOwnerConstraints.includes(constraint) ||
+          String(constraint).toLowerCase().includes('owner')
+        ) {
+          throw new ForbiddenException('You already have a restaurant');
+        }
+      }
+
+      // rethrow unknown errors
+      throw err;
+    }
   }
 
   async findMine(ownerId: string) {

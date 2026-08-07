@@ -6,7 +6,8 @@ export const restaurants = pgTable('restaurants', {
   id: uuid('id').primaryKey().defaultRandom(),
   ownerId: uuid('owner_id')
     .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
+    .references(() => users.id, { onDelete: 'cascade' })
+    .unique(),
   name: text('name').notNull(),
   description: text('description'),
   imageUrl: text('image_url'),

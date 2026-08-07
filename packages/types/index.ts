@@ -80,9 +80,8 @@ export interface OrderItem {
   menuItemId: string;
   quantity: string;
   unitPrice: string;
-  createdAt: Date;
+  createdAt: string;
 };
-
 export const OrderStatus = {
   PENDING: 'PENDING',
   CONFIRMED: 'CONFIRMED',

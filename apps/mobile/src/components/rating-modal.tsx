@@ -101,6 +101,10 @@ export function RatingModal({
             numberOfLines={2}
           />
 
+          {errorMessage ? (
+            <Text style={styles.errorText}>{errorMessage}</Text>
+          ) : null}
+
           <Pressable
             style={[
               styles.submitButton,

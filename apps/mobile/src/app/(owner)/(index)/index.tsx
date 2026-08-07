@@ -27,11 +27,7 @@ export default function OwnerHomeScreen() {
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
 
-  const {
-    data: restaurant,
-    isLoading,
-    isFetching,
-  } = useQuery<RestaurantType | null>({
+  const { data: restaurant, isLoading } = useQuery<RestaurantType | null>({
     queryKey: ['my-restaurant'],
     queryFn: () => api
       .get<RestaurantType | null>('/restaurants/mine')

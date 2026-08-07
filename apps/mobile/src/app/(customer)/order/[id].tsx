@@ -51,13 +51,12 @@ export default function OrderConfirmationScreen() {
     if (orderUpdate) {
       // update React Query cache directly — no new HTTP request needed
       // ['order', id] must match the queryKey in useQuery above
-      queryClient.setQueryData(['order', id], (old: unknown) => ({
-        ...(old as object),
-        ...orderUpdate,
-      }));
+      queryClient.setQueryData<Order & { items: any[] }>(
+        ['order', id],
+        (old) => (old ? { ...old, ...orderUpdate } : old),
+      );
     }
   }, [orderUpdate, id, queryClient]);
-
   const {
     data: order,
     isLoading,
