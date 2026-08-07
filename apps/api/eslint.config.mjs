@@ -27,6 +27,13 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
+      /**
+       * Disable the base rule. `@typescript-eslint/no-throw-literal`
+       * (enabled via recommendedTypeChecked) is type-aware and correctly
+       * recognizes `UploadThingError` (which extends `Micro.Error`) as an
+       * error object, unlike the base rule which only does static analysis.
+       */
+      'no-throw-literal': 'off',
     },
   },
 );

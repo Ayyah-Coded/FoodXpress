@@ -22,7 +22,7 @@ export default function CreateRestaurantScreen() {
 
   const { openImagePicker, isUploading } = useImageUploader('restaurantImage', {
     onClientUploadComplete: (res) => {
-      const uploadedFile = res?.[0]?.fileUrl;
+      const uploadedFile = res?.[0]?.ufsUrl;
       if (!uploadedFile) {
         Alert.alert('Upload failed', 'No uploaded file was returned.');
         return;
