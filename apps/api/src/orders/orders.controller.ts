@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UpdateStatusDto } from './dto/update-status.dto';
@@ -75,6 +75,11 @@ export class OrdersController {
     if (!value) return undefined;
 
     const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
+    if (!Number.isSafeInteger(parsed) || parsed < 0) {
+      throw new BadRequestException(
+        'Pagination values must be non-negative integers',
+      );
+    }
+    return parsed;
+  };
 };

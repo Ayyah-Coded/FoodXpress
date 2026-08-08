@@ -5,6 +5,7 @@
   "dependencies": {
     "@expo/ui": "~57.0.9",
     "@food-xpress/types": "workspace:*",
+    "@stripe/stripe-react-native": "0.64.0",
     "@tanstack/react-query": "^5.101.4",
     "@uploadthing/expo": "^7.2.6",
     "axios": "^1.19.0",

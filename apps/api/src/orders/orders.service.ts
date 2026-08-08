@@ -43,7 +43,7 @@ export class OrdersService {
     const total = dto.items.reduce((sum, orderItem) => {
       const menuItem = menuItems.find((m) => m.id === orderItem.menuItemId);
       if (!menuItem) return sum;
-      return sum + parseFloat(menuItem.price) * parseInt(orderItem.quantity);
+      return sum + parseFloat(menuItem.price) * (orderItem.quantity);
     }, 0);
 
     // insert the order
@@ -160,48 +160,36 @@ export class OrdersService {
         .where(eq(schema.restaurants.ownerId, user.sub));
 
       if (!restaurant || restaurant.id !== order.restaurantId) {
-        const [updated] = await this.db
-          .update(schema.orders)
-          .set({ status: newStatus, updatedAt: new Date() })
-          .where(
-            and(
-              eq(schema.orders.id, orderId),
-              eq(schema.orders.status, order.status),
-            ),
-          )
-          .returning();
+        throw new ForbiddenException(
+          'This order does not belong to your restaurant',
+        );
+      }
+    }
 
-        if (!updated) {
-          throw new ConflictException('Order status changed concurrently');
-        }
+    if (user.role === UserRole.DRIVER && order.driverId !== user.sub) {
+      throw new ForbiddenException('This order is not assigned to you');
+    }
 
-        this.ordersGateway.emitOrderUpdate(updated);
+    const [updated] = await this.db
+      .update(schema.orders)
+      .set({ status: newStatus, updatedAt: new Date() })
+      .where(eq(schema.orders.id, orderId))
+      .returning();
 
-        if (newStatus === 'READY') {
-          try {
-            await this.driverService.assignDriver(orderId);
-            const ownerTransitions: Record<string, string[]> = {
-              PENDING: ['CONFIRMED', 'CANCELLED'],
-              CONFIRMED: ['PREPARING', 'CANCELLED'],
-              PREPARING: ['READY', 'CANCELLED'],
-            };
+    this.ordersGateway.emitOrderUpdate(updated);
 
-            const driverTransitions: Record<string, string[]> = {
-              READY: ['PICKED_UP'],
-              PICKED_UP: ['DELIVERED'],
-            };
+    if (newStatus === 'READY') {
+      await this.driverService.assignDriver(orderId);
+    }
 
-            const allowed =
-              role === UserRole.RESTAURANT_OWNER
-                ? (ownerTransitions[currentStatus] ?? [])
-                : role === UserRole.DRIVER
-                  ? (driverTransitions[currentStatus] ?? [])
-                  : [];
+    return updated;
+  }
+
   private validateTransition(
-                    currentStatus: string,
-                    newStatus: string,
-                    role: string,
-                  ) {
+    currentStatus: string,
+    newStatus: string,
+    role: string,
+  ) {
     const ownerTransitions: Record<string, string[]> = {
       CONFIRMED: ['PREPARING', 'CANCELLED'],
       PREPARING: ['READY', 'CANCELLED'],
@@ -223,8 +211,8 @@ export class OrdersService {
       throw new BadRequestException(
         `Cannot transition from ${currentStatus} to ${newStatus}`,
       );
-    };
-  };
+    }
+  }
 
   private async isOwnerOfRestaurant(ownerId: string, restaurantId: string) {
     // one restaurant per owner — single query is enough

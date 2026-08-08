@@ -3,11 +3,14 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from "@nestjs/common";
 import { createRouteHandler } from 'uploadthing/express';
 import { uploadRouter } from './uploadthing/upload-router';
+import { NestExpressApplication } from '@nestjs/platform-express';
 
 
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true, // Enable raw body parsing for Stripe webhook
+  });
 
   app.enableCors();
   app.setGlobalPrefix('api');
