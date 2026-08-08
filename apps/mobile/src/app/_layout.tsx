@@ -1,5 +1,4 @@
 import { Stack } from 'expo-router';
-import AppTabs from '@/components/app-tabs';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '@/context/auth-context';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
@@ -9,6 +8,7 @@ import { DarkTheme } from 'expo-router/build/react-navigation/native/theming/Dar
 import { DefaultTheme } from 'expo-router/build/react-navigation/native/theming/DefaultTheme';
 import { ThemeProvider } from 'expo-router/build/react-navigation/core/theming/ThemeProvider';
 import { UserRole } from '@food-xpress/types';
+import { StripeProvider } from '@stripe/stripe-react-native';
 
 
 
@@ -52,10 +52,12 @@ export default function TabLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <AuthProvider>
-          <AnimatedSplashOverlay />
-          <RootNavigator />
-        </AuthProvider>
+        <StripeProvider publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY!}>
+          <AuthProvider>
+            <AnimatedSplashOverlay />
+            <RootNavigator />
+          </AuthProvider>
+        </StripeProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

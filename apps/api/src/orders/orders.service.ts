@@ -1,7 +1,7 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { OrderStatus, UserRole } from '@food-xpress/types';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { desc, eq, inArray, SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, SQL } from 'drizzle-orm';
 import * as schema from '../db/schema';
 import { OrdersGateway } from '../gateway/orders.gateway';
 import { DriverService } from '../driver/driver.service';
@@ -164,25 +164,43 @@ export class OrdersService {
           'This order does not belong to your restaurant',
         );
       }
-    }
+    };
 
     if (user.role === UserRole.DRIVER && order.driverId !== user.sub) {
       throw new ForbiddenException('This order is not assigned to you');
-    }
+    };
 
     const [updated] = await this.db
       .update(schema.orders)
       .set({ status: newStatus, updatedAt: new Date() })
-      .where(eq(schema.orders.id, orderId))
+      .where(and(
+        eq(schema.orders.id, orderId),
+        eq(schema.orders.status, order.status),
+      ))
       .returning();
+
+    if (!updated) {
+      throw new ConflictException('Order status changed concurrently');
+    }
 
     this.ordersGateway.emitOrderUpdate(updated);
 
     if (newStatus === 'READY') {
-      await this.driverService.assignDriver(orderId);
+      void this.enqueueReadyOrderAssignment(orderId);
     }
 
     return updated;
+  }
+
+  private async enqueueReadyOrderAssignment(orderId: string) {
+    try {
+      await this.db.insert(schema.outboxEvents).values({
+        eventType: 'order.ready',
+        payload: { orderId },
+      });
+    } catch {
+      // Intentionally ignore outbox write failures so the status update still succeeds.
+    }
   }
 
   private validateTransition(

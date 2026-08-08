@@ -3,7 +3,7 @@ import { menuItems } from './menus';
 import { restaurants } from './restaurants';
 import { sql } from 'drizzle-orm';
 import {
-  check, foreignKey, integer, numeric, pgEnum, pgTable,
+  check, foreignKey, integer, json, numeric, pgEnum, pgTable,
   text, timestamp, unique, uuid
 } from 'drizzle-orm/pg-core';
 
@@ -41,6 +41,23 @@ export const orders = pgTable('orders', {
     check(
       "orders_total_amount_non_negative",
       sql<boolean>`${table.totalAmount} >= 0`
+    ),
+  ],
+);
+
+export const outboxEvents = pgTable('outbox_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  eventType: text('event_type').notNull(),
+  payload: json('payload').notNull(),
+  retryCount: integer('retry_count').default(0).notNull(),
+  lastError: text('last_error'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  processedAt: timestamp('processed_at'),
+},
+  (table) => [
+    check(
+      "outbox_events_retry_count_non_negative",
+      sql`${table.retryCount} >= 0`
     ),
   ],
 );
@@ -83,3 +100,4 @@ export const orderItems = pgTable('order_items', {
 export type Order = typeof orders.$inferSelect;
 export type NewOrder = typeof orders.$inferInsert;
 export type OrderItem = typeof orderItems.$inferSelect;
+export type OutboxEvent = typeof outboxEvents.$inferSelect;

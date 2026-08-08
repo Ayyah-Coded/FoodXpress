@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from '@nes
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { OrdersGateway } from '../gateway/orders.gateway';
 import * as schema from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import Stripe from 'stripe';
 
 
@@ -28,29 +28,66 @@ export class PaymentsService {
 
     if (order.customerId !== customerId) {
       throw new NotFoundException('Order not found');
-    };
+    }
 
     if (order.status !== 'PENDING') {
       throw new BadRequestException('Order is no longer pending');
-    };
+    }
 
-    // create payment intent — amount must be in smallest currency unit (cents)
-    const paymentIntent = await this.stripe.paymentIntents.create({
-      amount: Math.round(parseFloat(order.totalAmount) * 100), // e.g. $8.99 → 899 cents
-      currency: 'usd',
-      metadata: {
-        orderId: order.id, // attach orderId so we can find it in the webhook
-      },
+    return this.db.transaction(async (tx) => {
+      const reservationResult = await tx.execute(sql`SELECT 1 FROM orders WHERE id = ${orderId} AND status = 'PENDING' FOR UPDATE`);
+      if (!reservationResult.rows.length) {
+        throw new BadRequestException('Order is no longer pending');
+      }
+
+      const [reservedOrder] = await tx
+        .select()
+        .from(schema.orders)
+        .where(eq(schema.orders.id, orderId));
+
+      if (!reservedOrder) throw new NotFoundException('Order not found');
+
+      if (reservedOrder.stripePaymentIntentId) {
+        try {
+          const existingIntent = await this.stripe.paymentIntents.retrieve(reservedOrder.stripePaymentIntentId);
+          if (existingIntent && ['requires_payment_method', 'requires_confirmation', 'requires_action', 'processing'].includes(existingIntent.status)) {
+            return { clientSecret: existingIntent.client_secret };
+          }
+        } catch {
+          // fall through to create a fresh intent if the stored one is no longer retrievable
+        }
+      }
+
+      const idempotencyKey = `order-${orderId}`;
+      const paymentIntent = await this.stripe.paymentIntents.create(
+        {
+          amount: Math.round(parseFloat(reservedOrder.totalAmount) * 100),
+          currency: 'usd',
+          metadata: {
+            orderId: reservedOrder.id,
+          },
+        },
+        {
+          idempotencyKey,
+        },
+      );
+
+      const [updatedOrder] = await tx
+        .update(schema.orders)
+        .set({ stripePaymentIntentId: paymentIntent.id })
+        .where(and(
+          eq(schema.orders.id, orderId),
+          eq(schema.orders.status, 'PENDING'),
+        ))
+        .returning();
+
+      if (!updatedOrder) {
+        throw new BadRequestException('Order is no longer pending');
+      }
+
+      return { clientSecret: paymentIntent.client_secret };
     });
-
-    // save paymentIntentId to order so webhook can match it
-    await this.db
-      .update(schema.orders)
-      .set({ stripePaymentIntentId: paymentIntent.id })
-      .where(eq(schema.orders.id, orderId));
-
-    return { clientSecret: paymentIntent.client_secret };
-  };
+  }
 
   async handleWebhook(rawBody: Buffer, signature: string) {
     let event: ReturnType<typeof this.stripe.webhooks.constructEvent>;
@@ -85,10 +122,15 @@ export class PaymentsService {
       const [updated] = await this.db
         .update(schema.orders)
         .set({ status: 'CONFIRMED', updatedAt: new Date() })
-        .where(eq(schema.orders.id, order.id))
+        .where(and(
+          eq(schema.orders.id, order.id),
+          eq(schema.orders.status, 'PENDING')
+        ))
         .returning();
 
-      this.ordersGateway.emitOrderUpdate(updated);
+      if (updated) {
+        this.ordersGateway.emitOrderUpdate(updated);
+      };
     };
 
     return { received: true }; // always return 200 to Stripe
