@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsNotEmpty, IsNumberString, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsNumberString, IsOptional, IsString, IsUUID, MinLength, ValidateIf } from 'class-validator';
 
 
 export class UpdateMenuItemDto {
@@ -8,6 +8,7 @@ export class UpdateMenuItemDto {
   categoryId?: string;
 
   @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value)
+  @ValidateIf((_, value) => value !== undefined)
   @IsString()
   @IsNotEmpty()
   @MinLength(2)

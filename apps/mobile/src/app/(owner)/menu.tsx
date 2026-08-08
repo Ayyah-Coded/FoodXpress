@@ -23,23 +23,15 @@ export default function OwnerMenuScreen() {
   const [newItemName, setNewItemName] = useState('');
   const [newItemPrice, setNewItemPrice] = useState('');
 
-  const {
-    data: restaurant,
-    isPending: restaurantPending,
-  } = useQuery<RestaurantType | null>({
+
+  const { data: restaurant, isPending: restaurantPending } = useQuery<RestaurantType | null>({
     queryKey: ['my-restaurant'],
-    queryFn: () =>
-      api.get<RestaurantType | null>('/restaurants/mine').then((r) => r.data),
+    queryFn: () => api.get<RestaurantType | null>('/restaurants/mine').then((r) => r.data),
   });
 
-  const {
-    data: categories = [],
-    isPending: categoriesPending,
-  } = useQuery<MenuCategory[]>({
+  const { data: categories = [], isPending: categoriesPending } = useQuery<MenuCategory[]>({
     queryKey: ['categories', restaurant?.id],
-    queryFn: () => api
-      .get<MenuCategory[]>(`/menu/categories/${restaurant?.id}`)
-      .then((r) => r.data),
+    queryFn: () => api.get<MenuCategory[]>(`/menu/categories/${restaurant?.id}`).then((r) => r.data),
     enabled: !!restaurant?.id,
   });
 
@@ -70,10 +62,7 @@ export default function OwnerMenuScreen() {
       setShowAddCategory(false);
     },
     onError: (e: { response?: { data?: { message?: string } } }) => {
-      Alert.alert(
-        'Error',
-        e.response?.data?.message ?? 'Could not create category',
-      );
+      Alert.alert('Error', e.response?.data?.message ?? 'Could not create category');
     },
   });
 
@@ -88,10 +77,7 @@ export default function OwnerMenuScreen() {
       });
     },
     onError: (e: { response?: { data?: { message?: string } } }) => {
-      Alert.alert(
-        'Error',
-        e.response?.data?.message ?? 'Could not delete category',
-      );
+      Alert.alert('Error', e.response?.data?.message ?? 'Could not delete category');
     },
   });
 
@@ -102,27 +88,22 @@ export default function OwnerMenuScreen() {
       return;
     }
     addCategory(name);
-  }
+  };
 
   const [newItemImageUrl, setNewItemImageUrl] = useState<string | null>(null);
 
-  const {
-    openImagePicker: openItemImagePicker,
-    isUploading: uploadingItemImage,
-  } = useImageUploader('menuItemImage', {
+  const { openImagePicker: openItemImagePicker, isUploading: uploadingItemImage } = useImageUploader(
+    'menuItemImage', {
     onClientUploadComplete: (res: { ufsUrl: SetStateAction<string | null>; }[]) => {
       setNewItemImageUrl(res[0].ufsUrl);
     },
     onUploadError: (error: { message: string | undefined; }) => {
       Alert.alert('Upload failed', error.message);
     },
-  });
+  }
+  );
 
-  const { mutate: addItem, isPending: addingItem } = useMutation<
-    void,
-    { response?: { data?: { message?: string } } },
-    { price: number }
-  >({
+  const { mutate: addItem, isPending: addingItem } = useMutation<void, { response?: { data?: { message?: string } } }, { price: number }>({
     mutationFn: async ({ price }) => {
       await api.post('/menu/items', {
         categoryId: selectedCategoryId,
@@ -132,34 +113,25 @@ export default function OwnerMenuScreen() {
       });
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: ['menu-items', restaurant?.id],
-      });
+      void queryClient.invalidateQueries({ queryKey: ['menu-items', restaurant?.id] });
       setNewItemName('');
       setNewItemPrice('');
       setNewItemImageUrl(null);
       setShowAddItem(false);
     },
     onError: (e) => {
-      Alert.alert(
-        'Error',
-        e.response?.data?.message ?? 'Could not create menu item',
-      );
+      Alert.alert('Error', e.response?.data?.message ?? 'Could not create menu item');
     },
   });
 
   const { mutate: toggleAvailability } = useMutation({
-    mutationFn: ({ id, isAvailable }: { id: string; isAvailable: boolean }) =>
-      api.patch(`/menu/items/${id}`, { isAvailable }),
+    mutationFn: ({ id, isAvailable }: { id: string; isAvailable: boolean }) => api.patch(`/menu/items/${id}`, { isAvailable }),
+
     onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: ['menu-items', restaurant?.id],
-      }),
+      queryClient.invalidateQueries({ queryKey: ['menu-items', restaurant?.id] }),
+
     onError: (e: { response?: { data?: { message?: string } } }) => {
-      Alert.alert(
-        'Error',
-        e.response?.data?.message ?? 'Could not update availability',
-      );
+      Alert.alert('Error', e.response?.data?.message ?? 'Could not update availability');
     },
   });
 
@@ -183,26 +155,22 @@ export default function OwnerMenuScreen() {
     };
 
     addItem({ price });
-  }
+  };
 
   function closeAddItemModal() {
     setShowAddItem(false);
     setNewItemName('');
     setNewItemPrice('');
     setNewItemImageUrl(null);
-  }
+  };
 
   const { mutate: deleteItem } = useMutation({
     mutationFn: (id: string) => api.delete(`/menu/items/${id}`),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: ['menu-items', restaurant?.id],
-      }),
+
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['menu-items', restaurant?.id] }),
+
     onError: (e: { response?: { data?: { message?: string } } }) => {
-      Alert.alert(
-        'Error',
-        e.response?.data?.message ?? 'Could not delete menu item',
-      );
+      Alert.alert('Error', e.response?.data?.message ?? 'Could not delete menu item');
     }
   });
 
@@ -214,19 +182,19 @@ export default function OwnerMenuScreen() {
         </View>
       </SafeAreaView>
     );
-  }
+  };
 
   if (!restaurant) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.centered}>
           <Text style={styles.emptyText}>
-            Create your restaurant on the Orders tab first.
+            Create your restaurant on the Orders Tab first.
           </Text>
         </View>
       </SafeAreaView>
     );
-  }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -254,13 +222,7 @@ export default function OwnerMenuScreen() {
                       'All items in this category will also be deleted.',
                       [
                         { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Delete',
-                          style: 'destructive',
-                          onPress: () => {
-                            deleteCategory(category.id);
-                          },
-                        },
+                        { text: 'Delete', style: 'destructive', onPress: () => { deleteCategory(category.id) } },
                       ],
                     );
                   }}
@@ -290,26 +252,19 @@ export default function OwnerMenuScreen() {
                         </Text>
                         <Switch
                           value={isAvailable}
-                          onValueChange={(value) =>
-                            toggleAvailability({
-                              id: item.id,
-                              isAvailable: value,
-                            })
-                          }
+                          onValueChange={(value) => toggleAvailability({ id: item.id, isAvailable: value })}
                           trackColor={{ false: '#FECACA', true: '#86EFAC' }}
                           thumbColor={isAvailable ? '#22C55E' : '#EF4444'}
                         />
                       </View>
                       <Pressable
                         onPress={() => {
-                          Alert.alert('Delete item?', item.name, [
-                            { text: 'Cancel', style: 'cancel' },
-                            {
-                              text: 'Delete',
-                              style: 'destructive',
-                              onPress: () => deleteItem(item.id),
-                            },
-                          ]);
+                          Alert.alert('Delete item?', item.name,
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              { text: 'Delete', style: 'destructive', onPress: () => deleteItem(item.id) }
+                            ]
+                          );
                         }}
                       >
                         <Text style={styles.deleteText}>Delete</Text>
@@ -377,15 +332,10 @@ export default function OwnerMenuScreen() {
                       'You need to grant permission to your Photos',
                       [
                         { text: 'Dismiss' },
-                        {
-                          text: 'Open Settings',
-                          onPress: () => {
-                            void openSettings();
-                          },
-                        },
+                        { text: 'Open Settings', onPress: () => void openSettings() },
                       ],
                     );
-                  },
+                  }
                 })
               }
               disabled={uploadingItemImage}
@@ -420,12 +370,7 @@ export default function OwnerMenuScreen() {
             <Pressable
               style={styles.button}
               onPress={handleAddItem}
-              disabled={
-                addingItem ||
-                uploadingItemImage ||
-                !newItemName.trim() ||
-                !newItemPrice.trim()
-              }
+              disabled={addingItem || uploadingItemImage || !newItemName.trim() || !newItemPrice.trim()}
             >
               {addingItem ? (
                 <ActivityIndicator color="#fff" />

@@ -5,10 +5,12 @@ import { useQuery } from '@tanstack/react-query';
 import { useDebounce } from '@/hooks/use-debounce';
 import { RestaurantType } from '@food-xpress/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
 import {
   ActivityIndicator, FlatList, Image, Pressable,
   StyleSheet, Text, TextInput, View
 } from 'react-native';
+
 
 export default function CustomerHomeScreen() {
   const [search, setSearch] = useState('');
@@ -55,20 +57,14 @@ export default function CustomerHomeScreen() {
               style={styles.card}
               onPress={
                 item.isOpen
-                  ? () =>
-                    router.push(
-                      `/(customer)/(tabs)/(home)/restaurant/${item.id}`
-                    )
+                  ? () => router.push(`/(customer)/(tabs)/(home)/restaurant/${item.id}`)
                   : undefined
               }
               disabled={!item.isOpen}
               accessibilityState={{ disabled: !item.isOpen }}
             >
               {item.imageUrl ? (
-                <Image
-                  source={{ uri: item.imageUrl }}
-                  style={styles.cardImage}
-                />
+                <Image source={{ uri: item.imageUrl }} style={styles.cardImage} />
               ) : (
                 <View style={styles.cardImagePlaceholder} />
               )}
@@ -79,9 +75,7 @@ export default function CustomerHomeScreen() {
                   {Number(item.rating) > 0 ? (
                     <View style={styles.ratingBadge}>
                       <Text style={styles.ratingStar}>★</Text>
-                      <Text style={styles.ratingValue}>
-                        {Number(item.rating).toFixed(1)}
-                      </Text>
+                      <Text style={styles.ratingValue}>{Number(item.rating).toFixed(1)}</Text>
                     </View>
                   ) : (
                     <Text style={styles.noRating}>New</Text>

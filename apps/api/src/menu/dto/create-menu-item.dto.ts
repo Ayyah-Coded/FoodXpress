@@ -1,4 +1,4 @@
-import { Transform } from 'class-transformer/types/decorators/transform.decorator';
+import { Transform } from 'class-transformer';
 import { IsNotEmpty, IsNumberString, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 
 

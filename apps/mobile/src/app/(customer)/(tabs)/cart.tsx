@@ -21,11 +21,12 @@ export default function CartScreen() {
     decrementItem,
     clearCart,
   } = useCartStore();
+
   const [deliveryAddress, setDeliveryAddress] = useState('');
 
-  const itemCount = items.reduce((sum: any, i: { quantity: any; }) => sum + i.quantity, 0);
+  const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
   const cartTotal = items.reduce(
-    (sum: number, i: { price: string; quantity: number; }) => sum + parseFloat(i.price) * i.quantity,
+    (sum, i) => sum + parseFloat(i.price) * i.quantity,
     0,
   );
 
@@ -34,7 +35,7 @@ export default function CartScreen() {
       api.post('/orders', {
         restaurantId,
         deliveryAddress,
-        items: items.map((i: { id: any; quantity: any; }) => ({
+        items: items.map((i) => ({
           menuItemId: i.id,
           quantity: String(i.quantity),
         })),
@@ -44,10 +45,7 @@ export default function CartScreen() {
       router.push(`/(customer)/order/${res.data.id}`);
     },
     onError: (e: any) => {
-      Alert.alert(
-        'Error',
-        e?.response?.data?.message ?? 'Could not place order',
-      );
+      Alert.alert('Error', e?.response?.data?.message ?? 'Could not place order');
     },
   });
 
@@ -56,7 +54,7 @@ export default function CartScreen() {
     if (!deliveryAddress.trim())
       return Alert.alert('Please enter your delivery address');
     placeOrder();
-  }
+  };
 
   if (items.length === 0) {
     return (
@@ -72,7 +70,7 @@ export default function CartScreen() {
         </View>
       </SafeAreaView>
     );
-  }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

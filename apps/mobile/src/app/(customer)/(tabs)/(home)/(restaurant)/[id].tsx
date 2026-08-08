@@ -17,15 +17,13 @@ export default function RestaurantDetailScreen() {
   const { data: restaurant, isLoading: loadingRestaurant } =
     useQuery<RestaurantType>({
       queryKey: ['restaurant', id],
-      queryFn: () =>
-        api.get<RestaurantType>(`/restaurants/${id}`).then((r) => r.data),
+      queryFn: () => api.get<RestaurantType>(`/restaurants/${id}`).then((r) => r.data),
       enabled: !!id,
     });
 
   const { data: categories = [] } = useQuery<MenuCategory[]>({
     queryKey: ['categories', id],
-    queryFn: () =>
-      api.get<MenuCategory[]>(`/menu/categories/${id}`).then((r) => r.data),
+    queryFn: () => api.get<MenuCategory[]>(`/menu/categories/${id}`).then((r) => r.data),
     enabled: !!id,
   });
 
@@ -78,11 +76,11 @@ export default function RestaurantDetailScreen() {
       restaurantId: item.restaurantId,
       restaurantName: restaurant.name,
     });
-  }
+  };
 
   function getItemQuantity(itemId: string) {
     return items.find((i: { id: string; }) => i.id === itemId)?.quantity ?? 0;
-  }
+  };
 
   if (loadingRestaurant) {
     return (
@@ -92,7 +90,7 @@ export default function RestaurantDetailScreen() {
         </View>
       </SafeAreaView>
     );
-  }
+  };
 
   if (!restaurant) return null;
 
@@ -106,7 +104,7 @@ export default function RestaurantDetailScreen() {
           />
         ) : (
           <View style={styles.heroPlaceholder} />
-        )}
+        )};
 
         <View style={styles.infoSection}>
           <Text style={styles.name}>{restaurant.name}</Text>
@@ -162,9 +160,7 @@ export default function RestaurantDetailScreen() {
                         <View style={styles.qtyControls}>
                           <Pressable
                             style={styles.qtyButton}
-                            onPress={() =>
-                              useCartStore.getState().decrementItem(item.id)
-                            }
+                            onPress={() => useCartStore.getState().decrementItem(item.id)}
                           >
                             <Text style={styles.qtyButtonText}>−</Text>
                           </Pressable>
@@ -194,7 +190,7 @@ export default function RestaurantDetailScreen() {
       </ScrollView>
     </SafeAreaView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
