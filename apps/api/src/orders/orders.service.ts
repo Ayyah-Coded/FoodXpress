@@ -1,11 +1,13 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { OrderStatus, UserRole } from '@food-xpress/types';
-import { CreateOrderDto } from './dto/create-order.dto';
-import { and, desc, eq, inArray, SQL } from 'drizzle-orm';
-import * as schema from '../db/schema';
-import { OrdersGateway } from '../gateway/orders.gateway';
-import { DriverService } from '../driver/driver.service';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { OrdersGateway } from '../gateway/orders.gateway';
+import { and, desc, eq, inArray, SQL } from 'drizzle-orm';
+import { DriverService } from '../driver/driver.service';
+import { CreateOrderDto } from './dto/create-order.dto';
+import * as schema from '../db/schema';
+
+
 
 @Injectable()
 export class OrdersService {
@@ -63,6 +65,7 @@ export class OrdersService {
       dto.items.map((item) => {
         const menuItem = menuItems.find((m) => m.id === item.menuItemId)!;
         return {
+          restaurantId: dto.restaurantId,
           orderId: order.id,
           menuItemId: item.menuItemId,
           quantity: item.quantity,
@@ -192,11 +195,17 @@ export class OrdersService {
       }
 
       return updated;
-    }).then((updated) => {
+    }).then(async (updated) => {
       this.ordersGateway.emitOrderUpdate(updated);
+
+      // when an order is ready, try to assign an online driver immediately
+      if (newStatus === 'READY') {
+        await this.driverService.assignDriver(orderId);
+      }
+
       return updated;
     });
-  }
+  };
 
   private validateTransition(
     currentStatus: string,

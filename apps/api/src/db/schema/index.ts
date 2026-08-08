@@ -3,3 +3,4 @@ export * from './restaurants';
 export * from './menus';
 export * from './orders';
 export * from './reviews';
+export * from './locations';
