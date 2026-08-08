@@ -48,24 +48,7 @@ export class PaymentsService {
 
       if (!reservedOrder) throw new NotFoundException('Order not found');
 
-      const existingAttemptId = reservedOrder.stripePaymentAttemptId;
-      const existingPaymentIntentId = reservedOrder.stripePaymentIntentId;
-
-      if (existingPaymentIntentId) {
-        try {
-          const existingIntent = await this.stripe.paymentIntents.retrieve(existingPaymentIntentId);
-          if (existingIntent && ['requires_payment_method', 'requires_confirmation', 'requires_action', 'processing'].includes(existingIntent.status)) {
-            return { clientSecret: existingIntent.client_secret, paymentIntentId: existingIntent.id };
-          }
-        } catch {
-          // fall through to create a fresh intent when the stored one is unavailable
-        }
-      }
-
-      const attemptId = existingAttemptId ?? `order-${orderId}-${randomUUID()}`;
-      const nextAttemptId = existingPaymentIntentId && existingAttemptId
-        ? `order-${orderId}-${randomUUID()}`
-        : attemptId;
+      const nextAttemptId = reservedOrder.stripePaymentAttemptId ?? `order-${orderId}-${randomUUID()}`;
 
       const [updatedOrder] = await tx
         .update(schema.orders)
@@ -128,6 +111,9 @@ export class PaymentsService {
         .returning();
 
       if (!updatedOrder) {
+        await this.stripe.paymentIntents
+          .cancel(paymentIntent.id)
+          .catch(() => undefined);
         throw new BadRequestException('Order is no longer pending');
       }
 
