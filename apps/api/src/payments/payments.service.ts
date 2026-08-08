@@ -3,6 +3,7 @@ import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { OrdersGateway } from '../gateway/orders.gateway';
 import * as schema from '../db/schema';
 import { and, eq, sql } from 'drizzle-orm';
+import { randomUUID } from 'crypto';
 import Stripe from 'stripe';
 
 
@@ -47,34 +48,79 @@ export class PaymentsService {
 
       if (!reservedOrder) throw new NotFoundException('Order not found');
 
-      if (reservedOrder.stripePaymentIntentId) {
+      const existingAttemptId = reservedOrder.stripePaymentAttemptId;
+      const existingPaymentIntentId = reservedOrder.stripePaymentIntentId;
+
+      if (existingPaymentIntentId) {
         try {
-          const existingIntent = await this.stripe.paymentIntents.retrieve(reservedOrder.stripePaymentIntentId);
+          const existingIntent = await this.stripe.paymentIntents.retrieve(existingPaymentIntentId);
+          if (existingIntent && ['requires_payment_method', 'requires_confirmation', 'requires_action', 'processing'].includes(existingIntent.status)) {
+            return { clientSecret: existingIntent.client_secret, paymentIntentId: existingIntent.id };
+          }
+        } catch {
+          // fall through to create a fresh intent when the stored one is unavailable
+        }
+      }
+
+      const attemptId = existingAttemptId ?? `order-${orderId}-${randomUUID()}`;
+      const nextAttemptId = existingPaymentIntentId && existingAttemptId
+        ? `order-${orderId}-${randomUUID()}`
+        : attemptId;
+
+      const [updatedOrder] = await tx
+        .update(schema.orders)
+        .set({ stripePaymentAttemptId: nextAttemptId })
+        .where(and(
+          eq(schema.orders.id, orderId),
+          eq(schema.orders.status, 'PENDING'),
+        ))
+        .returning();
+
+      if (!updatedOrder) {
+        throw new BadRequestException('Order is no longer pending');
+      }
+
+      return { attemptId: nextAttemptId };
+    }).then(async (reservation) => {
+      if (!reservation) return reservation;
+
+      const [currentOrder] = await this.db
+        .select()
+        .from(schema.orders)
+        .where(eq(schema.orders.id, orderId));
+
+      if (!currentOrder) throw new NotFoundException('Order not found');
+
+      if (currentOrder.stripePaymentIntentId) {
+        try {
+          const existingIntent = await this.stripe.paymentIntents.retrieve(currentOrder.stripePaymentIntentId);
           if (existingIntent && ['requires_payment_method', 'requires_confirmation', 'requires_action', 'processing'].includes(existingIntent.status)) {
             return { clientSecret: existingIntent.client_secret };
           }
         } catch {
-          // fall through to create a fresh intent if the stored one is no longer retrievable
+          // fall through to create a fresh intent when the stored one is unavailable
         }
       }
 
-      const idempotencyKey = `order-${orderId}`;
       const paymentIntent = await this.stripe.paymentIntents.create(
         {
-          amount: Math.round(parseFloat(reservedOrder.totalAmount) * 100),
+          amount: Math.round(parseFloat(currentOrder.totalAmount) * 100),
           currency: 'usd',
           metadata: {
-            orderId: reservedOrder.id,
+            orderId: currentOrder.id,
           },
         },
         {
-          idempotencyKey,
+          idempotencyKey: reservation.attemptId,
         },
       );
 
-      const [updatedOrder] = await tx
+      const [updatedOrder] = await this.db
         .update(schema.orders)
-        .set({ stripePaymentIntentId: paymentIntent.id })
+        .set({
+          stripePaymentIntentId: paymentIntent.id,
+          stripePaymentAttemptId: reservation.attemptId,
+        })
         .where(and(
           eq(schema.orders.id, orderId),
           eq(schema.orders.status, 'PENDING'),
@@ -119,18 +165,23 @@ export class PaymentsService {
       // idempotency check — skip if already confirmed (Stripe can resend webhooks)
       if (order.status === 'CONFIRMED') return { received: true };
 
-      const [updated] = await this.db
-        .update(schema.orders)
-        .set({ status: 'CONFIRMED', updatedAt: new Date() })
-        .where(and(
-          eq(schema.orders.id, order.id),
-          eq(schema.orders.status, 'PENDING')
-        ))
-        .returning();
+      await this.db.transaction(async (tx) => {
+        const [updated] = await tx
+          .update(schema.orders)
+          .set({ status: 'CONFIRMED', updatedAt: new Date() })
+          .where(and(
+            eq(schema.orders.id, order.id),
+            eq(schema.orders.status, 'PENDING')
+          ))
+          .returning();
 
-      if (updated) {
-        this.ordersGateway.emitOrderUpdate(updated);
-      };
+        if (updated) {
+          await tx.insert(schema.outboxEvents).values({
+            eventType: 'order.updated',
+            payload: { orderId: updated.id },
+          });
+        }
+      });
     };
 
     return { received: true }; // always return 200 to Stripe

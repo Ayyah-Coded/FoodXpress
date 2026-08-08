@@ -30,6 +30,7 @@ export const orders = pgTable('orders', {
   totalAmount: numeric('total_amount', { precision: 10, scale: 2 }).notNull(),
   deliveryAddress: text('delivery_address').notNull(),
   stripePaymentIntentId: text('stripe_payment_intent_id'),
+  stripePaymentAttemptId: text('stripe_payment_attempt_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 },

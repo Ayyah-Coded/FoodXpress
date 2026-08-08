@@ -170,37 +170,32 @@ export class OrdersService {
       throw new ForbiddenException('This order is not assigned to you');
     };
 
-    const [updated] = await this.db
-      .update(schema.orders)
-      .set({ status: newStatus, updatedAt: new Date() })
-      .where(and(
-        eq(schema.orders.id, orderId),
-        eq(schema.orders.status, order.status),
-      ))
-      .returning();
+    return this.db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(schema.orders)
+        .set({ status: newStatus, updatedAt: new Date() })
+        .where(and(
+          eq(schema.orders.id, orderId),
+          eq(schema.orders.status, order.status),
+        ))
+        .returning();
 
-    if (!updated) {
-      throw new ConflictException('Order status changed concurrently');
-    }
+      if (!updated) {
+        throw new ConflictException('Order status changed concurrently');
+      }
 
-    this.ordersGateway.emitOrderUpdate(updated);
+      if (newStatus === 'READY') {
+        await tx.insert(schema.outboxEvents).values({
+          eventType: 'order.ready',
+          payload: { orderId },
+        });
+      }
 
-    if (newStatus === 'READY') {
-      void this.enqueueReadyOrderAssignment(orderId);
-    }
-
-    return updated;
-  }
-
-  private async enqueueReadyOrderAssignment(orderId: string) {
-    try {
-      await this.db.insert(schema.outboxEvents).values({
-        eventType: 'order.ready',
-        payload: { orderId },
-      });
-    } catch {
-      // Intentionally ignore outbox write failures so the status update still succeeds.
-    }
+      return updated;
+    }).then((updated) => {
+      this.ordersGateway.emitOrderUpdate(updated);
+      return updated;
+    });
   }
 
   private validateTransition(
