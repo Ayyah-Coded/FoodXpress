@@ -104,7 +104,7 @@ export default function RestaurantDetailScreen() {
           />
         ) : (
           <View style={styles.heroPlaceholder} />
-        )};
+        )}
 
         <View style={styles.infoSection}>
           <Text style={styles.name}>{restaurant.name}</Text>

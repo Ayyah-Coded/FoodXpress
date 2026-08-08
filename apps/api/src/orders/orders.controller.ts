@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UpdateStatusDto } from './dto/update-status.dto';
@@ -26,15 +26,32 @@ export class OrdersController {
   @Get('mine')
   @UseGuards(RolesGuard)
   @Roles(UserRole.CUSTOMER, UserRole.DRIVER)
-  findMine(@Request() req: AuthRequest) {
-    return this.ordersService.findMyOrders(req.user.sub, req.user.role);
+  findMine(
+    @Request() req: AuthRequest,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.ordersService.findMyOrders(
+      req.user.sub,
+      req.user.role,
+      this.parsePagination(limit),
+      this.parsePagination(offset),
+    );
   }
 
   @Get('restaurant')
   @UseGuards(RolesGuard)
   @Roles(UserRole.RESTAURANT_OWNER)
-  findByRestaurant(@Request() req: AuthRequest) {
-    return this.ordersService.findByRestaurant(req.user.sub);
+  findByRestaurant(
+    @Request() req: AuthRequest,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.ordersService.findByRestaurant(
+      req.user.sub,
+      this.parsePagination(limit),
+      this.parsePagination(offset),
+    );
   }
 
   @Patch(':id/status')
@@ -53,4 +70,11 @@ export class OrdersController {
     // pass the logged-in user so the service can enforce role-based access
     return this.ordersService.findById(id, req.user);
   };
+
+  private parsePagination(value?: string) {
+    if (!value) return undefined;
+
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
 };

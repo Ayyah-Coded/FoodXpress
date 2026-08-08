@@ -1,22 +1,22 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { OrderStatus, UserRole } from '@food-xpress/types';
-import { NeonHttpDatabase } from 'drizzle-orm/neon-http';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { desc, eq, inArray, SQL } from 'drizzle-orm';
 import * as schema from '../db/schema';
 import { OrdersGateway } from '../gateway/orders.gateway';
 import { DriverService } from '../driver/driver.service';
+import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 
 @Injectable()
 export class OrdersService {
   constructor(
-    @Inject('DB') private db: NeonHttpDatabase<typeof schema>,
+    @Inject('DB') private db: NodePgDatabase<typeof schema>,
     private ordersGateway: OrdersGateway,
     private driverService: DriverService,
   ) {}
 
   async create(customerId: string, dto: CreateOrderDto) {
-    const menuItemIds = dto.items.map((i) => i.menuItemId);
+    const menuItemIds = [... new Set(dto.items.map((i) => i.menuItemId))];
 
     // fetch all menu items in one query
     const menuItems = await this.db
@@ -24,10 +24,7 @@ export class OrdersService {
       .from(schema.menuItems)
       .where(inArray(schema.menuItems.id, menuItemIds));
 
-    // verify all menu item IDs were actually found in the DB
-    // if any ID is invalid, menuItems.length < dto.items.length
-    // without this check, find() returns undefined and total becomes NaN
-    if (menuItems.length !== dto.items.length) {
+    if (menuItems.length !== menuItemIds.length) {
       throw new BadRequestException('One or more menu items not found');
     }
 
@@ -75,23 +72,31 @@ export class OrdersService {
     );
 
     return order;
-  }
+  };
 
-  async findByCustomer(customerId: string) {
-    return this.findOrdersWithDetails(eq(schema.orders.customerId, customerId));
-  }
+  async findByCustomer(customerId: string, limit?: number, offset?: number) {
+    return this.findOrdersWithDetails(
+      eq(schema.orders.customerId, customerId),
+      limit,
+      offset,
+    );
+  };
 
-  async findByDriver(driverId: string) {
-    return this.findOrdersWithDetails(eq(schema.orders.driverId, driverId));
-  }
+  async findByDriver(driverId: string, limit?: number, offset?: number) {
+    return this.findOrdersWithDetails(
+      eq(schema.orders.driverId, driverId),
+      limit,
+      offset,
+    );
+  };
 
   // routes to customer or driver query based on JWT role
-  async findMyOrders(userId: string, role: string) {
+  async findMyOrders(userId: string, role: string, limit?: number, offset?: number) {
     if (role === UserRole.DRIVER) {
-      return this.findByDriver(userId);
+      return this.findByDriver(userId, limit, offset);
     }
-    return this.findByCustomer(userId);
-  }
+    return this.findByCustomer(userId, limit, offset);
+  };
 
   async findById(id: string, user: { sub: string; role: string }) {
     const [order] = await this.db
@@ -117,9 +122,9 @@ export class OrdersService {
       .where(eq(schema.orderItems.orderId, id));
 
     return { ...order, items };
-  }
+  };
 
-  async findByRestaurant(ownerId: string) {
+  async findByRestaurant(ownerId: string, limit?: number, offset?: number) {
     const [restaurant] = await this.db
       .select()
       .from(schema.restaurants)
@@ -129,8 +134,10 @@ export class OrdersService {
 
     return this.findOrdersWithDetails(
       eq(schema.orders.restaurantId, restaurant.id),
+      limit,
+      offset,
     );
-  }
+  };
 
   async updateStatus(
     orderId: string,
@@ -153,36 +160,48 @@ export class OrdersService {
         .where(eq(schema.restaurants.ownerId, user.sub));
 
       if (!restaurant || restaurant.id !== order.restaurantId) {
-        throw new ForbiddenException(
-          'This order does not belong to your restaurant',
-        );
-      }
-    }
+        const [updated] = await this.db
+          .update(schema.orders)
+          .set({ status: newStatus, updatedAt: new Date() })
+          .where(
+            and(
+              eq(schema.orders.id, orderId),
+              eq(schema.orders.status, order.status),
+            ),
+          )
+          .returning();
 
-    if (user.role === UserRole.DRIVER && order.driverId !== user.sub) {
-      throw new ForbiddenException('This order is not assigned to you');
-    }
+        if (!updated) {
+          throw new ConflictException('Order status changed concurrently');
+        }
 
-    const [updated] = await this.db
-      .update(schema.orders)
-      .set({ status: newStatus, updatedAt: new Date() })
-      .where(eq(schema.orders.id, orderId))
-      .returning();
+        this.ordersGateway.emitOrderUpdate(updated);
 
-    this.ordersGateway.emitOrderUpdate(updated);
+        if (newStatus === 'READY') {
+          try {
+            await this.driverService.assignDriver(orderId);
+            const ownerTransitions: Record<string, string[]> = {
+              PENDING: ['CONFIRMED', 'CANCELLED'],
+              CONFIRMED: ['PREPARING', 'CANCELLED'],
+              PREPARING: ['READY', 'CANCELLED'],
+            };
 
-    if (newStatus === 'READY') {
-      await this.driverService.assignDriver(orderId);
-    }
+            const driverTransitions: Record<string, string[]> = {
+              READY: ['PICKED_UP'],
+              PICKED_UP: ['DELIVERED'],
+            };
 
-    return updated;
-  }
-
+            const allowed =
+              role === UserRole.RESTAURANT_OWNER
+                ? (ownerTransitions[currentStatus] ?? [])
+                : role === UserRole.DRIVER
+                  ? (driverTransitions[currentStatus] ?? [])
+                  : [];
   private validateTransition(
-    currentStatus: string,
-    newStatus: string,
-    role: string,
-  ) {
+                    currentStatus: string,
+                    newStatus: string,
+                    role: string,
+                  ) {
     const ownerTransitions: Record<string, string[]> = {
       CONFIRMED: ['PREPARING', 'CANCELLED'],
       PREPARING: ['READY', 'CANCELLED'],
@@ -204,8 +223,8 @@ export class OrdersService {
       throw new BadRequestException(
         `Cannot transition from ${currentStatus} to ${newStatus}`,
       );
-    }
-  }
+    };
+  };
 
   private async isOwnerOfRestaurant(ownerId: string, restaurantId: string) {
     // one restaurant per owner — single query is enough
@@ -238,20 +257,36 @@ export class OrdersService {
 
     const restaurantMap = Object.fromEntries(restaurants.map((r) => [r.id, r]));
 
+    const itemsByOrderId = new Map<string, typeof items>();
+    for (const item of items) {
+      const bucket = itemsByOrderId.get(item.orderId) ?? [];
+      bucket.push(item);
+      itemsByOrderId.set(item.orderId, bucket);
+    }
+
     return orderRows.map((order) => ({
       ...order,
       restaurant: restaurantMap[order.restaurantId],
-      items: items.filter((i) => i.orderId === order.id),
+      items: itemsByOrderId.get(order.id) ?? [],
     }));
   };
 
   // shared fetch: filter orders, sort newest first, enrich with relations
-  private async findOrdersWithDetails(where: SQL) {
-    const orderRows = await this.db
+  private async findOrdersWithDetails(where: SQL, limit?: number, offset?: number) {
+    const baseQuery = this.db
       .select()
       .from(schema.orders)
       .where(where)
       .orderBy(desc(schema.orders.createdAt));
+
+    const orderRows =
+      typeof limit === 'number' && typeof offset === 'number'
+        ? await baseQuery.limit(limit).offset(offset)
+        : typeof limit === 'number'
+          ? await baseQuery.limit(limit)
+          : typeof offset === 'number'
+            ? await baseQuery.offset(offset)
+            : await baseQuery;
 
     return this.enrichOrders(orderRows);
   };
