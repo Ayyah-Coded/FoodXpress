@@ -29,14 +29,13 @@ export default function ProfileScreen() {
         <ActivityIndicator color="#FF6B35" style={{ marginBottom: 24 }} />
       ) : isError ? (
         <Text style={styles.noRating}>Could not load driver rating</Text>
-      ) : ratingData?.averageRating ? (
+      ) : ratingData?.averageRating != null ? (
         <Text style={styles.driverRating}>
           ★ {ratingData.averageRating.toFixed(1)} driver rating
         </Text>
-      ) :
-        (
-          <Text style={styles.noRating}>No ratings yet</Text>
-        )}
+      ) : (
+        <Text style={styles.noRating}>No ratings yet</Text>
+      )}
 
       <Pressable
         style={styles.logoutButton}

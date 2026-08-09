@@ -65,11 +65,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   async function logout() {
-    await deleteToken();
-
-    setToken(null);
-    setUser(null);
+    try {
+      await deleteToken();
+    } finally {
+      setToken(null);
+      setUser(null);
+    }
   };
+
 
   return (
     <AuthContext.Provider value={{ user, token, isLoading, login, logout, register }}>

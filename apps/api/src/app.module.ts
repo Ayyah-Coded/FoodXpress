@@ -10,6 +10,7 @@ import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { GatewayModule } from './gateway/gateway.module';
 import { DriverModule } from './driver/driver.module';
+import { RedisModule } from './redis/redis.module';
 
 
 @Module({
@@ -22,7 +23,8 @@ import { DriverModule } from './driver/driver.module';
     OrdersModule,
     PaymentsModule,
     GatewayModule,
-    DriverModule
+    DriverModule,
+    RedisModule
   ],
   controllers: [AppController],
   providers: [AppService],

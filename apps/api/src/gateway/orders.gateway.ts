@@ -167,7 +167,7 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
       driverId,
       location.orderId,
       location.latitude,
-      location.longitude,
+      location.longitude
     );
 
     // forward to everyone in order:<orderId> room (customer tracking screen)

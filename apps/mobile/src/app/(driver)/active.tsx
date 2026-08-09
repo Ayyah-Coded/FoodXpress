@@ -45,50 +45,53 @@ export default function DriverActiveScreen() {
   // request permission, connect socket, start GPS watch
   // resources are effect-local so cleanup can cancel pending startup
   useEffect(() => {
-    if (!activeOrder || !token) return;
+    const driverId = user?.id;
+    if (!activeOrder || !token || !driverId) return;
 
     let cancelled = false;
     let socket: Socket | null = null;
     let locationWatch: Location.LocationSubscription | null = null;
 
     async function startTracking(orderId: string) {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (cancelled) return;
-      if (status !== Location.PermissionStatus.GRANTED) {
-        Alert.alert(
-          'Permission denied',
-          'Location permission is required for delivery tracking.',
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (cancelled) return;
+        if (status !== Location.PermissionStatus.GRANTED) {
+          Alert.alert(
+            'Permission denied',
+            'Location permission is required for delivery tracking.',
+          );
+          return;
+        }
+
+        socket = io(`${process.env.EXPO_PUBLIC_SERVER_URL}/orders`, {
+          transports: ['websocket'],
+          auth: { token },
+        });
+
+        locationWatch = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.High,
+            timeInterval: 3000,
+            distanceInterval: 10,
+          },
+          (location: Location.LocationObject) => {
+            socket?.emit('driver:location', {
+              driverId,
+              orderId,
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+            });
+          },
         );
-        return;
-      }
-
-      socket = io(`${process.env.EXPO_PUBLIC_SERVER_URL}/orders`, {
-        transports: ['websocket'],
-        auth: { token },
-      });
-
-      locationWatch = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 3000,
-          distanceInterval: 10,
-        },
-        (location: Location.LocationObject) => {
-          socket?.emit('driver:location', {
-            driverId: user?.id,
-            orderId,
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-          });
-        },
-      );
-
-      // startup finished after cancellation — remove the resources we just made
-      if (cancelled) {
-        locationWatch?.remove();
+      } catch {
         socket?.disconnect();
-      }
-    }
+
+        if (!cancelled) {
+          Alert.alert('Location unavailable', 'Location tracking could not start.');
+        }
+      };
+    };
 
     void startTracking(activeOrder.id);
 
@@ -97,7 +100,7 @@ export default function DriverActiveScreen() {
       locationWatch?.remove();
       socket?.disconnect();
     };
-  }, [activeOrder?.id, token]);
+  }, [activeOrder?.id, token, user?.id]);
 
   if (isLoading) {
     return (
