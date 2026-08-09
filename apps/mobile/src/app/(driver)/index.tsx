@@ -4,8 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/context/auth-context';
 import { io, Socket } from 'socket.io-client';
 import { Order } from '@food-xpress/types';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/axios';
+import { getToken } from '@/lib/auth';
 
 
 let socket: Socket | null = null;
@@ -14,6 +15,13 @@ export default function DriverHomeScreen() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [incomingOrder, setIncomingOrder] = useState<Order | null>(null);
+  const incomingOrderRef = useRef<Order | null>(null);
+  const pendingOrdersRef = useRef<Order[]>([]);
+
+  const setCurrentOrder = (order: Order | null) => {
+    incomingOrderRef.current = order;
+    setIncomingOrder(order);
+  };
 
   // fetch current online/offline state from GET /driver/status
   const { data: status, isLoading } = useQuery<{ isOnline: boolean }>({
@@ -33,7 +41,10 @@ export default function DriverHomeScreen() {
   const { mutate: declineOrder } = useMutation({
     mutationFn: (orderId: string) =>
       api.post(`/driver/orders/${orderId}/decline`),
-    onSuccess: () => setIncomingOrder(null),
+    onSuccess: () => {
+      const next = pendingOrdersRef.current.shift();
+      setCurrentOrder(next ?? null);
+    },
     onError: (e: any) =>
       Alert.alert(
         'Error',
@@ -46,7 +57,8 @@ export default function DriverHomeScreen() {
     mutationFn: (orderId: string) =>
       api.patch(`/orders/${orderId}/status`, { status: 'PICKED_UP' }),
     onSuccess: () => {
-      setIncomingOrder(null);
+      const next = pendingOrdersRef.current.shift();
+      setCurrentOrder(next ?? null);
       queryClient.invalidateQueries({ queryKey: ['driver-active-orders'] });
     },
     onError: (e: any) =>
@@ -59,18 +71,33 @@ export default function DriverHomeScreen() {
   useEffect(() => {
     if (!user?.id) return;
 
-    socket = io(`${process.env.EXPO_PUBLIC_SERVER_URL}/orders`, {
-      transports: ['websocket'],
-    });
+    let cancelled = false;
 
-    socket.emit('join:driver', user.id);
+    (async () => {
+      const token = await getToken();
 
-    // server pushes this when DriverService.assignDriver() runs
-    socket.on('driver:assigned', (order: Order) => {
-      setIncomingOrder(order);
-    });
+      if (cancelled || !token) return;
+
+      socket = io(`${process.env.EXPO_PUBLIC_SERVER_URL}/orders`, {
+        transports: ['websocket'],
+        auth: { token },
+      });
+
+      socket.emit('join:driver', user.id);
+
+      // server pushes this when DriverService.assignDriver() runs
+      socket.on('driver:assigned', (order: Order) => {
+        if (incomingOrderRef.current) {
+          // a request is already on screen — queue it so it isn't lost
+          pendingOrdersRef.current.push(order);
+        } else {
+          setCurrentOrder(order);
+        }
+      });
+    })();
 
     return () => {
+      cancelled = true;
       socket?.disconnect();
       socket = null;
     };

@@ -1,5 +1,5 @@
 import { api } from '@/lib/axios';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import * as Location from 'expo-location';
 import { Order } from '@food-xpress/types';
 import { io, Socket } from 'socket.io-client';
@@ -14,10 +14,8 @@ export default function DriverActiveScreen() {
   const insets = useSafeAreaInsets();
   const TAB_BAR_OFFSET = 88;
 
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const queryClient = useQueryClient();
-  const socketRef = useRef<Socket | null>(null);
-  const locationWatchRef = useRef<Location.LocationSubscription | null>(null);
 
   // driver's assigned orders — only PICKED_UP needs GPS + Mark Delivered
   const { data: activeOrders = [], isLoading } = useQuery<Order[]>({
@@ -34,7 +32,6 @@ export default function DriverActiveScreen() {
     mutationFn: (orderId: string) =>
       api.patch(`/orders/${orderId}/status`, { status: 'DELIVERED' }),
     onSuccess: () => {
-      stopTracking();
       queryClient.invalidateQueries({ queryKey: ['driver-active-orders'] });
       queryClient.invalidateQueries({ queryKey: ['driver-orders'] });
     },
@@ -46,50 +43,61 @@ export default function DriverActiveScreen() {
   });
 
   // request permission, connect socket, start GPS watch
-  async function startTracking(orderId: string) {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== Location.PermissionStatus.GRANTED) {
-      Alert.alert(
-        'Permission denied',
-        'Location permission is required for delivery tracking.',
-      );
-      return;
-    }
-
-    socketRef.current = io(`${process.env.EXPO_PUBLIC_SERVER_URL}/orders`, {
-      transports: ['websocket'],
-    });
-
-    locationWatchRef.current = await Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.High,
-        timeInterval: 3000,
-        distanceInterval: 10,
-      },
-      (location) => {
-        socketRef.current?.emit('driver:location', {
-          driverId: user?.id,
-          orderId,
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-        });
-      },
-    );
-  }
-
-  function stopTracking() {
-    locationWatchRef.current?.remove();
-    socketRef.current?.disconnect();
-    locationWatchRef.current = null;
-    socketRef.current = null;
-  }
-
+  // resources are effect-local so cleanup can cancel pending startup
   useEffect(() => {
-    if (activeOrder) {
-      void startTracking(activeOrder.id);
+    if (!activeOrder || !token) return;
+
+    let cancelled = false;
+    let socket: Socket | null = null;
+    let locationWatch: Location.LocationSubscription | null = null;
+
+    async function startTracking(orderId: string) {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (cancelled) return;
+      if (status !== Location.PermissionStatus.GRANTED) {
+        Alert.alert(
+          'Permission denied',
+          'Location permission is required for delivery tracking.',
+        );
+        return;
+      }
+
+      socket = io(`${process.env.EXPO_PUBLIC_SERVER_URL}/orders`, {
+        transports: ['websocket'],
+        auth: { token },
+      });
+
+      locationWatch = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 3000,
+          distanceInterval: 10,
+        },
+        (location: Location.LocationObject) => {
+          socket?.emit('driver:location', {
+            driverId: user?.id,
+            orderId,
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          });
+        },
+      );
+
+      // startup finished after cancellation — remove the resources we just made
+      if (cancelled) {
+        locationWatch?.remove();
+        socket?.disconnect();
+      }
     }
-    return () => stopTracking();
-  }, [activeOrder?.id]);
+
+    void startTracking(activeOrder.id);
+
+    return () => {
+      cancelled = true;
+      locationWatch?.remove();
+      socket?.disconnect();
+    };
+  }, [activeOrder?.id, token]);
 
   if (isLoading) {
     return (
@@ -118,7 +126,7 @@ export default function DriverActiveScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View
         style={
-          (styles.content, { paddingBottom: insets.bottom + TAB_BAR_OFFSET })
+          [styles.content, { paddingBottom: insets.bottom + TAB_BAR_OFFSET }]
         }
       >
         <Text style={styles.title}>Active Delivery</Text>

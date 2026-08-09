@@ -8,7 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { JwtPayload, UserRole } from '@food-xpress/types';
 import { Inject, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import * as schema from '../db/schema';
 
 
@@ -192,8 +192,13 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const [restaurant] = await this.db
       .select()
       .from(schema.restaurants)
-      .where(eq(schema.restaurants.ownerId, ownerId));
+      .where(
+        and(
+          eq(schema.restaurants.ownerId, ownerId),
+          eq(schema.restaurants.id, restaurantId),
+        ),
+      );
 
-    return restaurant?.id === restaurantId;
+    return !!restaurant;
   }
 };

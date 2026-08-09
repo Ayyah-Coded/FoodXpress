@@ -6,6 +6,7 @@ import { createContext, use, useContext, useEffect, useState } from "react";
 
 export interface AuthContextType {
   user: User | null;
+  token: string | null;
   isLoading: boolean;
   register: (data: RegisterData) => Promise<void>;
   login: (email: string, password: string) => Promise<void>
@@ -24,6 +25,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -35,6 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = await getToken();
 
       if (token) {
+        setToken(token);
         const res = await api.get('/auth/me');
         setUser(res.data);
       }
@@ -49,6 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const res = await api.post('/auth/login', { email, password })
     await saveToken(res.data.token);
 
+    setToken(res.data.token);
     setUser(res.data.user);
   };
 
@@ -56,17 +60,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const res = await api.post('/auth/register', data);
     await saveToken(res.data.token);
 
+    setToken(res.data.token);
     setUser(res.data.user);
   };
 
   async function logout() {
     await deleteToken();
 
+    setToken(null);
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, register }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, logout, register }}>
       {children}
     </AuthContext.Provider>
   )

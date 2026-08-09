@@ -7,7 +7,7 @@ import { api } from '@/lib/axios';
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
 
-  const { data: ratingData, isLoading } = useQuery<{ averageRating: number | null }>({
+  const { data: ratingData, isLoading, isError } = useQuery<{ averageRating: number | null }>({
     queryKey: ['driver-rating', user?.id],
     queryFn: () => api
       .get<{
@@ -27,13 +27,16 @@ export default function ProfileScreen() {
 
       {isLoading ? (
         <ActivityIndicator color="#FF6B35" style={{ marginBottom: 24 }} />
+      ) : isError ? (
+        <Text style={styles.noRating}>Could not load driver rating</Text>
       ) : ratingData?.averageRating ? (
         <Text style={styles.driverRating}>
           ★ {ratingData.averageRating.toFixed(1)} driver rating
         </Text>
-      ) : (
-        <Text style={styles.noRating}>No ratings yet</Text>
-      )}
+      ) :
+        (
+          <Text style={styles.noRating}>No ratings yet</Text>
+        )}
 
       <Pressable
         style={styles.logoutButton}
@@ -45,7 +48,7 @@ export default function ProfileScreen() {
       </Pressable>
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {

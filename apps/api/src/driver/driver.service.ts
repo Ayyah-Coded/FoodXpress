@@ -3,7 +3,7 @@ import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { OrdersGateway } from '../gateway/orders.gateway';
 import { UserRole } from '@food-xpress/types';
 import * as schema from '../db/schema';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 
 
 @Injectable()
@@ -80,9 +80,10 @@ export class DriverService {
         throw new NotFoundException('Order not found');
       }
 
-      // guard the predicate with driverId so a stale decline (a request that
-      // read the order before it was reassigned) cannot wipe out the new
-      // driver's assignment
+      // guard the predicate with driverId and status so a stale decline (a
+      // request that read the order before it was reassigned) cannot wipe out
+      // the new driver's assignment, and a decline cannot clear or reassign a
+      // PICKED_UP or DELIVERED order
       const [cleared] = await tx
         .update(schema.orders)
         .set({ driverId: null, updatedAt: new Date() })
@@ -90,6 +91,7 @@ export class DriverService {
           and(
             eq(schema.orders.id, orderId),
             eq(schema.orders.driverId, driverId),
+            eq(schema.orders.status, 'READY'),
           ),
         )
         .returning();
@@ -100,7 +102,9 @@ export class DriverService {
         throw new NotFoundException('Order not found');
       }
 
-      // find another online driver, inside the same transaction
+      // find another online driver, inside the same transaction, excluding
+      // the declining driver so the order is not immediately reassigned to
+      // the same driver who just declined it
       const [driver] = await tx
         .select()
         .from(schema.users)
@@ -108,6 +112,7 @@ export class DriverService {
           and(
             eq(schema.users.role, UserRole.DRIVER),
             eq(schema.users.isOnline, true),
+            ne(schema.users.id, driverId),
           ),
         );
 

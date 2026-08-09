@@ -65,7 +65,7 @@ function DeliveryCard({
 };
 
 export default function DriverHistoryScreen() {
-  const { data: orders = [], isLoading } = useQuery<DriverOrder[]>({
+  const { data: orders = [], isLoading, isError } = useQuery<DriverOrder[]>({
     queryKey: ['driver-orders'],
     queryFn: () => api.get<DriverOrder[]>('/orders/mine').then((r) => r.data),
   });
@@ -74,6 +74,16 @@ export default function DriverHistoryScreen() {
   const inProgressCount = orders.filter((o) =>
     ['READY', 'PICKED_UP'].includes(o.status),
   ).length;
+
+  if (isError && orders.length === 0) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.centered}>
+          <Text style={styles.emptyText}>Could not load deliveries</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (isLoading) {
     return (
