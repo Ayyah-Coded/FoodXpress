@@ -1,7 +1,8 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
+import { DriverLocation } from '../db/schema/locations';
 
 
 @Injectable()
@@ -16,21 +17,16 @@ export class LocationService {
     latitude: number,
     longitude: number,
   ) {
-    const [existing] = await this.db
+    const [activeOrder] = await this.db
       .select()
-      .from(schema.driverLocations)
-      .where(eq(schema.driverLocations.orderId, orderId));
+      .from(schema.orders)
+      .where(and(
+        eq(schema.orders.id, orderId),
+        eq(schema.orders.driverId, driverId),
+      ));
 
-    if (existing) {
-      return this.db
-        .update(schema.driverLocations)
-        .set({
-          latitude: latitude.toFixed(7),
-          longitude: longitude.toFixed(7),
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.driverLocations.orderId, orderId))
-        .returning();
+    if (!activeOrder) {
+      throw new NotFoundException('Active order assignment not found');
     }
 
     return this.db
@@ -41,6 +37,25 @@ export class LocationService {
         latitude: latitude.toFixed(7),
         longitude: longitude.toFixed(7),
       })
+      .onConflictDoUpdate({
+        target: schema.driverLocations.orderId,
+        set: {
+          driverId,
+          latitude: latitude.toFixed(7),
+          longitude: longitude.toFixed(7),
+          updatedAt: new Date(),
+        },
+      })
       .returning();
+  }
+
+  async getDriverLocation(orderId: string): Promise<DriverLocation | null> {
+    const [location] = await this.db
+      .select()
+      .from(schema.driverLocations)
+      .where(eq(schema.driverLocations.orderId, orderId))
+      .limit(1);
+
+    return location ?? null;
   }
 }

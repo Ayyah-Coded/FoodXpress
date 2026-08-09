@@ -195,14 +195,8 @@ export class OrdersService {
       }
 
       return updated;
-    }).then(async (updated) => {
+    }).then((updated) => {
       this.ordersGateway.emitOrderUpdate(updated);
-
-      // when an order is ready, try to assign an online driver immediately
-      if (newStatus === 'READY') {
-        await this.driverService.assignDriver(orderId);
-      }
-
       return updated;
     });
   };

@@ -1,6 +1,6 @@
 import { orders } from './orders';
 import { users } from './users';
-import { foreignKey, numeric, pgTable, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { foreignKey, numeric, pgTable, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
 
 export const driverLocations = pgTable('driver_locations', {
@@ -14,10 +14,11 @@ export const driverLocations = pgTable('driver_locations', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 },
   (table) => [
+    unique('driver_locations_order_unique').on(table.orderId),
     foreignKey({
-      columns: [table.orderId, table.driverId],
-      foreignColumns: [orders.id, orders.driverId],
-      name: "driver_locations_order_driver_fk",
+      columns: [table.orderId],
+      foreignColumns: [orders.id],
+      name: 'driver_locations_order_fk',
     }),
   ],
 );

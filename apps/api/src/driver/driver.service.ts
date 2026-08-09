@@ -69,25 +69,63 @@ export class DriverService {
   };
 
   async declineOrder(orderId: string, driverId: string) {
-    const [order] = await this.db
-      .select()
-      .from(schema.orders)
-      .where(eq(schema.orders.id, orderId));
+    return this.db.transaction(async (tx) => {
+      const [order] = await tx
+        .select()
+        .from(schema.orders)
+        .where(eq(schema.orders.id, orderId));
 
-    if (!order) throw new NotFoundException('Order not found');
-    if (order.driverId !== driverId) {
-      throw new NotFoundException('Order not found');
-    }
+      if (!order) throw new NotFoundException('Order not found');
+      if (order.driverId !== driverId) {
+        throw new NotFoundException('Order not found');
+      }
 
-    // clear assignment
-    await this.db
-      .update(schema.orders)
-      .set({ driverId: null, updatedAt: new Date() })
-      .where(eq(schema.orders.id, orderId));
+      // guard the predicate with driverId so a stale decline (a request that
+      // read the order before it was reassigned) cannot wipe out the new
+      // driver's assignment
+      const [cleared] = await tx
+        .update(schema.orders)
+        .set({ driverId: null, updatedAt: new Date() })
+        .where(
+          and(
+            eq(schema.orders.id, orderId),
+            eq(schema.orders.driverId, driverId),
+          ),
+        )
+        .returning();
 
-    // try to find another online driver
-    await this.assignDriver(orderId);
+      if (!cleared) {
+        // zero rows updated => another request already reassigned this order;
+        // treat as a conflict
+        throw new NotFoundException('Order not found');
+      }
 
-    return { message: 'Order declined' };
+      // find another online driver, inside the same transaction
+      const [driver] = await tx
+        .select()
+        .from(schema.users)
+        .where(
+          and(
+            eq(schema.users.role, UserRole.DRIVER),
+            eq(schema.users.isOnline, true),
+          ),
+        );
+
+      if (!driver) {
+        console.log('No online drivers available for order:', orderId);
+        return { message: 'Order declined' };
+      }
+
+      const [updatedOrder] = await tx
+        .update(schema.orders)
+        .set({ driverId: driver.id, updatedAt: new Date() })
+        .where(eq(schema.orders.id, orderId))
+        .returning();
+
+      // push to driver:<driverId> room — driver app shows incoming order modal
+      this.ordersGateway.emitDriverAssigned(driver.id, updatedOrder);
+
+      return { message: 'Order declined' };
+    });
   };
 };

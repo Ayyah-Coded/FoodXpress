@@ -4,6 +4,12 @@ import {
 } from '@nestjs/websockets';
 import { LocationService } from '../location/location.service';
 import { Server, Socket } from 'socket.io';
+import { JwtService } from '@nestjs/jwt';
+import { JwtPayload, UserRole } from '@food-xpress/types';
+import { Inject, UnauthorizedException, ForbiddenException } from '@nestjs/common';
+import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { eq } from 'drizzle-orm';
+import * as schema from '../db/schema';
 
 
 export interface DriverLocation {
@@ -13,19 +19,50 @@ export interface DriverLocation {
   longitude: number;
 };
 
+interface AuthenticatedSocket extends Socket {
+  data: {
+    user: JwtPayload;
+  };
+}
+
 @WebSocketGateway({
   cors: { origin: '*' },
   namespace: '/orders',
 })
 
 export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
-  constructor(private locationService: LocationService) {}
+  constructor(
+    private locationService: LocationService,
+    private jwtService: JwtService,
+    @Inject('DB') private db: NodePgDatabase<typeof schema>,
+  ) {}
 
   @WebSocketServer()
   server!: Server;
 
+  afterInit() {
+    this.server.use((socket: Socket, next) => {
+      const token =
+        (socket.handshake.auth?.token as string | undefined) ??
+        (socket.handshake.query?.token as string | undefined);
+
+      if (!token) {
+        return next(new UnauthorizedException('No token provided'));
+      }
+
+      try {
+        const payload = this.jwtService.verify<JwtPayload>(token);
+        (socket as AuthenticatedSocket).data.user = payload;
+        next();
+      } catch {
+        next(new UnauthorizedException('Invalid or expired token'));
+      }
+    });
+  }
+
   handleConnection(client: Socket) {
-    console.log(`Client connected: ${client.id}`);
+    const user = (client as AuthenticatedSocket).data.user;
+    console.log(`Client connected: ${client.id} (user: ${user.sub})`);
   }
 
   handleDisconnect(client: Socket) {
@@ -33,19 +70,62 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('join:order')
-  handleJoinOrder(
+  async handleJoinOrder(
     @ConnectedSocket() client: Socket,
     @MessageBody() orderId: string,
   ) {
+    const user = (client as AuthenticatedSocket).data.user;
+
+    const [order] = await this.db
+      .select()
+      .from(schema.orders)
+      .where(eq(schema.orders.id, orderId));
+
+    if (!order) {
+      throw new ForbiddenException('Order not found');
+    }
+
+    const canJoin =
+      (user.role === UserRole.CUSTOMER && order.customerId === user.sub) ||
+      (user.role === UserRole.RESTAURANT_OWNER &&
+        (await this.isOwnerOfRestaurant(user.sub, order.restaurantId))) ||
+      (user.role === UserRole.DRIVER && order.driverId === user.sub);
+
+    if (!canJoin) {
+      throw new ForbiddenException('You do not have access to this order');
+    }
+
     client.join(`order:${orderId}`);
     console.log(`Client ${client.id} joined order:${orderId}`);
+
+    // Send the persisted driver location (if any) so a reconnecting
+    // customer immediately sees the current position without waiting
+    // for the next driver update.
+    const persisted = await this.locationService.getDriverLocation(orderId);
+
+    if (persisted) {
+      client.emit('driver:location', {
+        driverId: persisted.driverId,
+        orderId: persisted.orderId,
+        latitude: Number(persisted.latitude),
+        longitude: Number(persisted.longitude),
+      });
+    }
   }
 
   @SubscribeMessage('join:restaurant')
-  handleJoinRestaurant(
+  async handleJoinRestaurant(
     @ConnectedSocket() client: Socket,
     @MessageBody() restaurantId: string,
   ) {
+    const user = (client as AuthenticatedSocket).data.user;
+
+    const isOwner = await this.isOwnerOfRestaurant(user.sub, restaurantId);
+
+    if (!isOwner) {
+      throw new ForbiddenException('You do not own this restaurant');
+    }
+
     client.join(`restaurant:${restaurantId}`);
     console.log(`Client ${client.id} joined restaurant:${restaurantId}`);
   }
@@ -55,6 +135,12 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() driverId: string,
   ) {
+    const user = (client as AuthenticatedSocket).data.user;
+
+    if (user.sub !== driverId) {
+      throw new ForbiddenException('You can only join your own driver room');
+    }
+
     client.join(`driver:${driverId}`);
     console.log(`Client ${client.id} joined driver:${driverId}`);
   }
@@ -66,11 +152,19 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('driver:location')
   async handleDriverLocation(
     @ConnectedSocket() client: Socket,
-    @MessageBody() location: DriverLocation,
+    @MessageBody() location: Omit<DriverLocation, 'driverId'>,
   ) {
+    const user = (client as AuthenticatedSocket).data.user;
+
+    if (user.role !== UserRole.DRIVER) {
+      throw new ForbiddenException('Only drivers can report location');
+    }
+
+    const driverId = user.sub;
+
     // persist so late-joining customers see current position
     await this.locationService.saveDriverLocation(
-      location.driverId,
+      driverId,
       location.orderId,
       location.latitude,
       location.longitude,
@@ -79,7 +173,7 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // forward to everyone in order:<orderId> room (customer tracking screen)
     this.server
       .to(`order:${location.orderId}`)
-      .emit('driver:location', location);
+      .emit('driver:location', { ...location, driverId });
   }
 
   emitOrderUpdate(order: {
@@ -92,5 +186,14 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(`order:${order.id}`).emit('order:updated', order);
     // → owner dashboard for this restaurant
     this.server.to(`restaurant:${order.restaurantId}`).emit('order:updated', order);
+  }
+
+  private async isOwnerOfRestaurant(ownerId: string, restaurantId: string) {
+    const [restaurant] = await this.db
+      .select()
+      .from(schema.restaurants)
+      .where(eq(schema.restaurants.ownerId, ownerId));
+
+    return restaurant?.id === restaurantId;
   }
 };
