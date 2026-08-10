@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer/types/decorators/type.decorator';
+import { Type } from 'class-transformer';
 import { IsInt, IsUUID, Min } from 'class-validator';
 
 
