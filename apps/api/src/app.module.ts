@@ -2,15 +2,16 @@ import { Module } from '@nestjs/common';
 import { DbModule } from './db/db.module';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
-import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
-import { RestaurantsModule } from './restaurant/restaurants.module';
 import { MenuModule } from './menu/menu.module';
-import { OrdersModule } from './orders/orders.module';
-import { PaymentsModule } from './payments/payments.module';
-import { GatewayModule } from './gateway/gateway.module';
-import { DriverModule } from './driver/driver.module';
+import { AppController } from './app.controller';
 import { RedisModule } from './redis/redis.module';
+import { OrdersModule } from './orders/orders.module';
+import { DriverModule } from './driver/driver.module';
+import { ReviewsModule } from './reviews/reviews.module';
+import { GatewayModule } from './gateway/gateway.module';
+import { PaymentsModule } from './payments/payments.module';
+import { RestaurantsModule } from './restaurant/restaurants.module';
 
 
 @Module({
@@ -24,7 +25,8 @@ import { RedisModule } from './redis/redis.module';
     PaymentsModule,
     GatewayModule,
     DriverModule,
-    RedisModule
+    RedisModule,
+    ReviewsModule
   ],
   controllers: [AppController],
   providers: [AppService],

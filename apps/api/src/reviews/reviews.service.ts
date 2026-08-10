@@ -1,7 +1,8 @@
 import * as schema from '../db/schema';
-import { and, avg, desc, eq } from 'drizzle-orm';
+import { and, avg, desc, eq, sql } from 'drizzle-orm';
 import { CreateReviewDto } from './dto/create-review.dto';
-import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { PgDatabase } from 'drizzle-orm/pg-core';
+import { NodePgDatabase, NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 
 
@@ -25,38 +26,66 @@ export class ReviewsService {
       throw new BadRequestException('You can only review delivered orders');
     };
 
-    const [existing] = await this.db
-      .select()
-      .from(schema.reviews)
-      .where(eq(schema.reviews.orderId, dto.orderId));
+    if (dto.driverRating !== undefined && !order.driverId) {
+      throw new BadRequestException('You can only rate a driver for orders with a driver');
+    }
 
-    if (existing) {
-      throw new BadRequestException('You have already reviewed this order');
-    };
+    // Serialize the review insert and the restaurant rating refresh in a single
+    // transaction. Locking the restaurant row up front (FOR UPDATE) makes
+    // concurrent reviews for the same restaurant run one at a time — otherwise
+    // each request could compute a different average and a stale request could
+    // overwrite a newer restaurant rating. Everything (insert + recalc) is
+    // committed atomically, so a failed rating refresh rolls back the review
+    // insert instead of leaving it without a synchronized restaurant rating.
+    return this.db.transaction(async (tx) => {
+      const reservationResult = await tx.execute(
+        sql`SELECT 1 FROM restaurants WHERE id = ${order.restaurantId} FOR UPDATE`,
+      );
+      if (!reservationResult.rows.length) {
+        throw new NotFoundException('Restaurant not found');
+      }
 
-    const [review] = await this.db
-      .insert(schema.reviews)
-      .values({
-        orderId: dto.orderId,
-        customerId,
-        restaurantId: order.restaurantId,
-        driverId: order.driverId ?? null,
-        restaurantRating: dto.restaurantRating,
-        driverRating: dto.driverRating ?? null,
-        comment: dto.comment ?? null,
-      })
-      .returning();
+      // Re-check inside the locked transaction so concurrent requests for the
+      // same order cannot both insert (the unique reviews.order_id constraint
+      // backs this up at the database level).
+      const [existing] = await tx
+        .select()
+        .from(schema.reviews)
+        .where(eq(schema.reviews.orderId, dto.orderId));
 
-    await this.syncRestaurantRating(order.restaurantId);
+      if (existing) {
+        throw new BadRequestException('You have already reviewed this order');
+      };
 
-    return review;
+      const [review] = await tx
+        .insert(schema.reviews)
+        .values({
+          orderId: dto.orderId,
+          customerId,
+          restaurantId: order.restaurantId,
+          driverId: order.driverId ?? null,
+          restaurantRating: dto.restaurantRating,
+          driverRating: dto.driverRating ?? null,
+          comment: dto.comment ?? null,
+        })
+        .returning();
+
+      await this.syncRestaurantRating(tx, order.restaurantId);
+
+      return review;
+    });
   };
 
-  private async syncRestaurantRating(restaurantId: string) {
-    const { averageRating } =
-      await this.getRestaurantAverageRating(restaurantId);
+  private async syncRestaurantRating(
+    tx: PgDatabase<NodePgQueryResultHKT, typeof schema>,
+    restaurantId: string,
+  ) {
+    const { averageRating } = await this.getRestaurantAverageRatingFrom(
+      tx,
+      restaurantId,
+    );
 
-    await this.db
+    await tx
       .update(schema.restaurants)
       .set({
         rating: averageRating !== null ? averageRating.toFixed(2) : '0',
@@ -74,7 +103,14 @@ export class ReviewsService {
   };
 
   async getRestaurantAverageRating(restaurantId: string) {
-    const [result] = await this.db
+    return this.getRestaurantAverageRatingFrom(this.db, restaurantId);
+  };
+
+  private async getRestaurantAverageRatingFrom(
+    db: PgDatabase<NodePgQueryResultHKT, typeof schema>,
+    restaurantId: string,
+  ) {
+    const [result] = await db
       .select({ avg: avg(schema.reviews.restaurantRating) })
       .from(schema.reviews)
       .where(eq(schema.reviews.restaurantId, restaurantId));

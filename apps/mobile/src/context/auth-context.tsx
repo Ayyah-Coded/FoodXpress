@@ -1,4 +1,11 @@
-import { deleteToken, getToken, saveToken } from "@/lib/auth";
+import {
+  deleteToken,
+  deleteTokenWithRetry,
+  getToken,
+  isSignoutBlocked,
+  saveToken,
+  setSignoutBlocked,
+} from "@/lib/auth";
 import { api } from "@/lib/axios";
 import { User } from "@food-xpress/types";
 import { createContext, use, useContext, useEffect, useState } from "react";
@@ -34,6 +41,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function checkExistingSession() {
     try {
+      // A previous logout failed to remove the persisted token. Refuse to
+      // restore the session so the user isn't silently logged back in.
+      if (await isSignoutBlocked()) {
+        await deleteTokenWithRetry();
+        return;
+      }
+
       const token = await getToken();
 
       if (token) {
@@ -51,6 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function login(email: string, password: string) {
     const res = await api.post('/auth/login', { email, password })
     await saveToken(res.data.token);
+    await setSignoutBlocked(false);
 
     setToken(res.data.token);
     setUser(res.data.user);
@@ -59,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function register(data: RegisterData) {
     const res = await api.post('/auth/register', data);
     await saveToken(res.data.token);
+    await setSignoutBlocked(false);
 
     setToken(res.data.token);
     setUser(res.data.user);
@@ -66,8 +82,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function logout() {
     try {
-      await deleteToken();
+      const removed = await deleteTokenWithRetry();
+
+      if (!removed) {
+        // The persisted token could not be removed. Persist a marker so a
+        // later provider mount (checkExistingSession) does not restore the
+        // session from the leftover token.
+        await setSignoutBlocked(true);
+      }
     } finally {
+      // Always clear the in-memory session for the current process.
       setToken(null);
       setUser(null);
     };
