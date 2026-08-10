@@ -65,12 +65,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   async function logout() {
-    try {
-      await deleteToken();
-    } finally {
-      setToken(null);
-      setUser(null);
-    }
+    await deleteToken();
+
+    setToken(null);
+    setUser(null);
   };
 
 

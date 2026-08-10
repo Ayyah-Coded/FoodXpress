@@ -30,6 +30,23 @@ export class DriverService {
     return { isOnline: updated.isOnline };
   };
 
+  async setOnline(driverId: string, isOnline: boolean) {
+    const [driver] = await this.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, driverId));
+
+    if (!driver) throw new NotFoundException('Driver not found');
+
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({ isOnline })
+      .where(eq(schema.users.id, driverId))
+      .returning();
+
+    return { isOnline: updated.isOnline };
+  };
+
   async getStatus(driverId: string) {
     const [driver] = await this.db
       .select()

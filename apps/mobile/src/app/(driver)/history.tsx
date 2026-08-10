@@ -1,6 +1,7 @@
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/context/auth-context';
 import { Order } from '@food-xpress/types';
 import { router } from 'expo-router';
 import { api } from '@/lib/axios';
@@ -65,9 +66,12 @@ function DeliveryCard({
 };
 
 export default function DriverHistoryScreen() {
+  const { user } = useAuth();
+
   const { data: orders = [], isLoading, isError } = useQuery<DriverOrder[]>({
-    queryKey: ['driver-orders'],
+    queryKey: ['driver-orders', user?.id],
     queryFn: () => api.get<DriverOrder[]>('/orders/mine').then((r) => r.data),
+    enabled: !!user?.id,
   });
 
   const deliveredCount = orders.filter((o) => o.status === 'DELIVERED').length;

@@ -1,4 +1,5 @@
-import { LocationService } from './location.service';
+import { LocationService } from '../src/location/location.service';
+
 
 describe('LocationService', () => {
   it('upserts the current location for the active assignment', async () => {

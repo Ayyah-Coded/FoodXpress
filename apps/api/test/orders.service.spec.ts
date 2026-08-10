@@ -1,5 +1,6 @@
-import { OrdersService } from './orders.service';
+import { OrdersService } from '../src/orders/orders.service';
 import { UserRole } from '@food-xpress/types';
+
 
 describe('OrdersService', () => {
   it('does not fail the READY transition when driver assignment rejects', async () => {
@@ -57,5 +58,8 @@ describe('OrdersService', () => {
         role: UserRole.RESTAURANT_OWNER,
       }),
     ).resolves.toMatchObject({ id: 'order-1' });
+    expect(driverService.assignDriver).toHaveBeenCalledWith('order-1');
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(ordersGateway.emitOrderUpdate).toHaveBeenCalledTimes(1);
   });
 });

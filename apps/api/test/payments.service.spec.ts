@@ -7,10 +7,26 @@ describe('PaymentsService', () => {
   let db: any;
   let stripe: any;
 
-  beforeEach(async () => {
-    process.env.STRIPE_SECRET_KEY = 'sk_test_123';
+  describe('PaymentsService', () => {
+    let service: PaymentsService;
+    let db: any;
+    let stripe: any;
+    let originalStripeSecretKey: string | undefined;
 
-    const order = {
+    beforeEach(async () => {
+      originalStripeSecretKey = process.env.STRIPE_SECRET_KEY;
+      process.env.STRIPE_SECRET_KEY = 'sk_test_123';
+
+      // ... existing setup ...
+    });
+
+    afterEach(() => {
+      if (originalStripeSecretKey === undefined) {
+        delete process.env.STRIPE_SECRET_KEY;
+      } else {
+        process.env.STRIPE_SECRET_KEY = originalStripeSecretKey;
+      }
+    }); const order = {
       id: 'order-1',
       customerId: 'customer-1',
       status: 'PENDING',

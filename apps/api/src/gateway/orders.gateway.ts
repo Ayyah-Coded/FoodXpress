@@ -1,6 +1,7 @@
 import {
   ConnectedSocket, MessageBody, OnGatewayConnection, OnGatewayDisconnect,
-  SubscribeMessage, WebSocketGateway, WebSocketServer
+  SubscribeMessage, WebSocketGateway, WebSocketServer,
+  WsException
 } from '@nestjs/websockets';
 import { LocationService } from '../location/location.service';
 import { Server, Socket } from 'socket.io';
@@ -105,8 +106,8 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     if (persisted) {
       client.emit('driver:location', {
-        driverId: persisted.driverId,
-        orderId: persisted.orderId,
+        driverId: user.sub,
+        orderId,
         latitude: Number(persisted.latitude),
         longitude: Number(persisted.longitude),
       });
@@ -138,7 +139,7 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const user = (client as AuthenticatedSocket).data.user;
 
     if (user.sub !== driverId) {
-      throw new ForbiddenException('You can only join your own driver room');
+      throw new WsException('You can only join your own driver room');
     }
 
     client.join(`driver:${driverId}`);
@@ -162,9 +163,32 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const driverId = user.sub;
 
+    const [order] = await this.db
+      .select()
+      .from(schema.orders)
+      .where(
+        and(
+          eq(schema.orders.id, location.orderId),
+          eq(schema.orders.driverId, driverId),
+        ),
+      );
+
+    if (!order) {
+      throw new ForbiddenException('You are not assigned to this order');
+    }
+
+    const { latitude, longitude } = location;
+    if (
+      typeof latitude !== 'number' || typeof longitude !== 'number' ||
+      !Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+      latitude < -90 || latitude > 90 ||
+      longitude < -180 || longitude > 180
+    ) {
+      throw new ForbiddenException('Invalid coordinates');
+    }
+
     // persist so late-joining customers see current position
     await this.locationService.saveDriverLocation(
-      driverId,
       location.orderId,
       location.latitude,
       location.longitude

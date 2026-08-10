@@ -69,13 +69,15 @@ export default function DriverActiveScreen() {
           auth: { token },
         });
 
-        locationWatch = await Location.watchPositionAsync(
+        const watch = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.High,
             timeInterval: 3000,
             distanceInterval: 10,
           },
           (location: Location.LocationObject) => {
+            if (cancelled) return;
+
             socket?.emit('driver:location', {
               driverId,
               orderId,
@@ -84,6 +86,13 @@ export default function DriverActiveScreen() {
             });
           },
         );
+
+        if (cancelled) {
+          watch.remove();
+          return;
+        }
+
+        locationWatch = watch;
       } catch {
         socket?.disconnect();
 

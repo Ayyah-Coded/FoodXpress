@@ -30,9 +30,10 @@ export default function DriverHomeScreen() {
       api.get<{ isOnline: boolean }>('/driver/status').then((r) => r.data),
   });
 
-  // flip isOnline on the server via PATCH /driver/online
-  const { mutate: toggleOnline, isPending: toggling } = useMutation({
-    mutationFn: () => api.patch('/driver/online'),
+  // set online/offline state on the server via PATCH /driver/online
+  const { mutate: setOnline, isPending: toggling } = useMutation({
+    mutationFn: (isOnline: boolean) =>
+      api.patch('/driver/online', { isOnline }),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['driver-status'] }),
   });
@@ -128,8 +129,8 @@ export default function DriverHomeScreen() {
             </Text>
             <Switch
               value={isOnline}
-              onValueChange={() => {
-                toggleOnline();
+              onValueChange={(value) => {
+                setOnline(value);
               }}
               disabled={toggling}
               trackColor={{ false: '#FECACA', true: '#86EFAC' }}
