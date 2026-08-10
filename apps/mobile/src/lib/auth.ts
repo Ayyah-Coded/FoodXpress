@@ -18,8 +18,12 @@ export const deleteTokenWithRetry = async (retries = 3): Promise<boolean> => {
       // Individual failure is ignored; removal is verified below.
     }
 
-    if ((await getToken()) === null) {
-      return true;
+    try {
+      if ((await getToken()) === null) {
+        return true;
+      }
+    } catch {
+      // Treat an unverified deletion as a failed deletion.
     }
   }
 

@@ -4,16 +4,25 @@ import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { Redis } from 'ioredis';
 import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema';
+
+
+type MenuCategory = typeof schema.menuCategories.$inferSelect;
+type MenuItem = typeof schema.menuItems.$inferSelect;
 
 
 @Injectable()
 export class MenuService {
   private readonly logger = new Logger(MenuService.name);
 
+  // TTL in seconds — menu data is read-heavy and changes rarely
+  private readonly CACHE_TTL = 300; // 5 minutes
+
   constructor(
     @Inject('DB') private db: NodePgDatabase<typeof schema>,
+    @Inject('REDIS') private readonly redis: Redis,
   ) {}
 
   private async getRestaurantByOwner(ownerId: string) {
@@ -38,15 +47,24 @@ export class MenuService {
       .values({ restaurantId: restaurant.id, name: dto.name })
       .returning();
 
+    await this.invalidateMenuCaches(restaurant.id);
+
     return category;
   };
 
-  async getCategories(restaurantId: string) {
-    const categories = this.db
+  async getCategories(restaurantId: string): Promise<MenuCategory[]> {
+    const key = `menu:categories:${restaurantId}`;
+    const cached = await this.redis.get(key);
+    if (cached) {
+      return JSON.parse(cached) as MenuCategory[];
+    }
+
+    const categories = await this.db
       .select()
       .from(schema.menuCategories)
       .where(eq(schema.menuCategories.restaurantId, restaurantId));
 
+    await this.redis.set(key, JSON.stringify(categories), 'EX', this.CACHE_TTL);
     return categories;
   };
 
@@ -72,6 +90,8 @@ export class MenuService {
       .where(eq(schema.menuCategories.id, id))
       .returning();
 
+    await this.invalidateMenuCaches(restaurant.id);
+
     return updated;
   };
 
@@ -95,6 +115,8 @@ export class MenuService {
     await this.db
       .delete(schema.menuCategories)
       .where(eq(schema.menuCategories.id, id));
+
+    await this.invalidateMenuCaches(restaurant.id);
 
     return { message: 'Category deleted' };
   };
@@ -129,16 +151,25 @@ export class MenuService {
       })
       .returning();
 
+    await this.invalidateMenuCaches(restaurant.id);
+
     return item;
   };
 
-  async getItemsByRestaurant(restaurantId: string) {
+  async getItemsByRestaurant(restaurantId: string): Promise<MenuItem[]> {
     // returns all items for a restaurant — frontend groups them by category
-    const items = this.db
+    const key = `menu:items:${restaurantId}`;
+    const cached = await this.redis.get(key);
+    if (cached) {
+      return JSON.parse(cached) as MenuItem[];
+    }
+
+    const items = await this.db
       .select()
       .from(schema.menuItems)
       .where(eq(schema.menuItems.restaurantId, restaurantId));
 
+    await this.redis.set(key, JSON.stringify(items), 'EX', this.CACHE_TTL);
     return items;
   };
 
@@ -179,6 +210,8 @@ export class MenuService {
       .where(eq(schema.menuItems.id, id))
       .returning();
 
+    await this.invalidateMenuCaches(restaurant.id);
+
     return updated;
   };
 
@@ -200,6 +233,17 @@ export class MenuService {
 
     await this.db.delete(schema.menuItems).where(eq(schema.menuItems.id, id));
 
+    await this.invalidateMenuCaches(restaurant.id);
+
     return { message: 'Item deleted' };
   };
+
+  // Remove cached menu entries for a restaurant so subsequent reads are
+  // rebuilt from the database (used after any category/item mutation).
+  private async invalidateMenuCaches(restaurantId: string) {
+    await this.redis.del(
+      `menu:categories:${restaurantId}`,
+      `menu:items:${restaurantId}`,
+    );
+  }
 };
