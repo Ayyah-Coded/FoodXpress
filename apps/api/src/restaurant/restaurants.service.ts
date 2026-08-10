@@ -17,6 +17,10 @@ export class RestaurantsService {
   private readonly CACHE_TTL = 300; // 5 minutes
   private readonly LIST_CACHE_TTL = 60; // 1 minute
 
+  // Bumped on every create/update so all previously written `restaurant:list:*`
+  // keys are atomically invalidated without a blocking KEYS/SCAN on the keyspace.
+  private readonly LIST_GENERATION_KEY = 'restaurant:list:generation';
+
   constructor(
     @Inject('DB') private db: NodePgDatabase<typeof schema>,
     @Inject('REDIS') private readonly redis: Redis,
@@ -50,13 +54,10 @@ export class RestaurantsService {
 
       return restaurant;
     } catch (err) {
-      // Postgres unique violation
-      // code 23505 indicates unique constraint violation
       const pgErr = err as { code?: string; constraint?: string; detail?: string };
       if (pgErr?.code === '23505') {
         const constraint = (pgErr.constraint ?? pgErr.detail ?? '').toString();
 
-        // Recognize known constraint names (DB-generated or explicitly named)
         const knownOwnerConstraints = [
           'restaurants_owner_id_key',
           'restaurants_owner_id_unique',
@@ -111,14 +112,13 @@ export class RestaurantsService {
   }
 
   async findAll(search?: string) {
-    const key = `restaurant:list:${search || 'all'}`;
+    const generation = await this.getListGeneration();
+    const key = `restaurant:list:${generation}:${search || 'all'}`;
     const cached = await this.redis.get(key);
     if (cached) {
       return JSON.parse(cached) as Restaurant[];
     }
 
-    // if search is provided, filter by name OR cuisine type (case-insensitive)
-    // only return open restaurants to customers
     let restaurants: Restaurant[];
     if (search) {
       restaurants = await this.db
@@ -165,28 +165,25 @@ export class RestaurantsService {
       .where(eq(schema.restaurants.id, id))
       .returning();
 
-    // Invalidate caches so stale data isn't served
     await this.invalidateRestaurantCaches(updated.id, ownerId);
 
     return updated;
   };
 
-  // Remove all cached entries tied to a restaurant so subsequent reads
-  // are rebuilt from the database (used after create/update).
   private async invalidateRestaurantCaches(id: string, ownerId: string) {
+
     const keysToDelete = [
       `restaurant:${id}`,
       `restaurant:owner:${ownerId}`,
     ];
-
-    // List caches are keyed by search term (and 'all'), so collect them via scan.
-    const listKeys = await this.redis.keys('restaurant:list:*');
-    if (listKeys.length > 0) {
-      keysToDelete.push(...listKeys);
-    }
-
     if (keysToDelete.length > 0) {
       await this.redis.del(...keysToDelete);
     }
+    await this.redis.incr(this.LIST_GENERATION_KEY);
+  }
+
+  private async getListGeneration(): Promise<number> {
+    const value = await this.redis.get(this.LIST_GENERATION_KEY);
+    return value ? Number(value) : 0;
   }
 };

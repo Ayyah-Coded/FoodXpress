@@ -54,7 +54,18 @@ export class MenuService {
 
   async getCategories(restaurantId: string): Promise<MenuCategory[]> {
     const key = `menu:categories:${restaurantId}`;
-    const cached = await this.redis.get(key);
+
+    // Redis failures are treated as cache misses: log and fall through to the
+    // database rather than rejecting the request.
+    let cached: string | null = null;
+    try {
+      cached = await this.redis.get(key);
+    } catch (err) {
+      this.logger.warn(
+        `Cache read failed for ${key}, treating as cache miss: ${(err as Error).message}`,
+      );
+    }
+
     if (cached) {
       return JSON.parse(cached) as MenuCategory[];
     }
@@ -64,7 +75,21 @@ export class MenuService {
       .from(schema.menuCategories)
       .where(eq(schema.menuCategories.restaurantId, restaurantId));
 
-    await this.redis.set(key, JSON.stringify(categories), 'EX', this.CACHE_TTL);
+    // A failed cache write is also non-fatal: the DB result is valid, so return
+    // it and let the next read rebuild the cache.
+    try {
+      await this.redis.set(
+        key,
+        JSON.stringify(categories),
+        'EX',
+        this.CACHE_TTL,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to warm cache for ${key}: ${(err as Error).message}`,
+      );
+    }
+
     return categories;
   };
 
@@ -159,7 +184,18 @@ export class MenuService {
   async getItemsByRestaurant(restaurantId: string): Promise<MenuItem[]> {
     // returns all items for a restaurant — frontend groups them by category
     const key = `menu:items:${restaurantId}`;
-    const cached = await this.redis.get(key);
+
+    // Redis failures are treated as cache misses: log and fall through to the
+    // database rather than rejecting the request.
+    let cached: string | null = null;
+    try {
+      cached = await this.redis.get(key);
+    } catch (err) {
+      this.logger.warn(
+        `Cache read failed for ${key}, treating as cache miss: ${(err as Error).message}`,
+      );
+    }
+
     if (cached) {
       return JSON.parse(cached) as MenuItem[];
     }
@@ -169,7 +205,21 @@ export class MenuService {
       .from(schema.menuItems)
       .where(eq(schema.menuItems.restaurantId, restaurantId));
 
-    await this.redis.set(key, JSON.stringify(items), 'EX', this.CACHE_TTL);
+    // A failed cache write is also non-fatal: the DB result is valid, so return
+    // it and let the next read rebuild the cache.
+    try {
+      await this.redis.set(
+        key,
+        JSON.stringify(items),
+        'EX',
+        this.CACHE_TTL,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to warm cache for ${key}: ${(err as Error).message}`,
+      );
+    }
+
     return items;
   };
 
@@ -238,12 +288,31 @@ export class MenuService {
     return { message: 'Item deleted' };
   };
 
-  // Remove cached menu entries for a restaurant so subsequent reads are
-  // rebuilt from the database (used after any category/item mutation).
-  private async invalidateMenuCaches(restaurantId: string) {
-    await this.redis.del(
+  private readonly CACHE_INVALIDATE_MAX_RETRIES = 3;
+  private readonly CACHE_INVALIDATE_RETRY_DELAY_MS = 100;
+
+
+  private async invalidateMenuCaches(restaurantId: string): Promise<void> {
+    const keys = [
       `menu:categories:${restaurantId}`,
       `menu:items:${restaurantId}`,
-    );
+    ];
+
+    for (let attempt = 1; attempt <= this.CACHE_INVALIDATE_MAX_RETRIES; attempt++) {
+      try {
+        await this.redis.del(...keys);
+        return;
+      } catch (err) {
+        const isLastAttempt = attempt === this.CACHE_INVALIDATE_MAX_RETRIES;
+        this.logger.warn(
+          `Failed to invalidate menu caches for restaurant ${restaurantId} ` +
+          `(attempt ${attempt}/${this.CACHE_INVALIDATE_MAX_RETRIES}): ${(err as Error).message}`,
+        );
+        if (isLastAttempt) break;
+        await new Promise((resolve) =>
+          setTimeout(resolve, this.CACHE_INVALIDATE_RETRY_DELAY_MS * attempt),
+        );
+      }
+    }
   }
 };
