@@ -96,7 +96,7 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
       throw new ForbiddenException('You do not have access to this order');
     }
 
-    client.join(`order:${orderId}`);
+    void client.join(`order:${orderId}`);
     console.log(`Client ${client.id} joined order:${orderId}`);
 
     // Send the persisted driver location (if any) so a reconnecting
@@ -105,11 +105,13 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const persisted = await this.locationService.getDriverLocation(orderId);
 
     if (persisted) {
+      // Only lat/lng are persisted in Redis (see LocationService.saveDriverLocation),
+      // so rehydrate driverId/orderId from the order record loaded above.
       client.emit('driver:location', {
-        driverId: user.sub,
-        orderId,
-        latitude: Number(persisted.latitude),
-        longitude: Number(persisted.longitude),
+        driverId: order.driverId ?? '',
+        orderId: order.id,
+        latitude: persisted.latitude,
+        longitude: persisted.longitude,
       });
     }
   }
@@ -127,7 +129,7 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
       throw new ForbiddenException('You do not own this restaurant');
     }
 
-    client.join(`restaurant:${restaurantId}`);
+    void client.join(`restaurant:${restaurantId}`);
     console.log(`Client ${client.id} joined restaurant:${restaurantId}`);
   }
 
@@ -142,7 +144,7 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
       throw new WsException('You can only join your own driver room');
     }
 
-    client.join(`driver:${driverId}`);
+    void client.join(`driver:${driverId}`);
     console.log(`Client ${client.id} joined driver:${driverId}`);
   }
 
@@ -163,29 +165,33 @@ export class OrdersGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const driverId = user.sub;
 
+    const { orderId, latitude, longitude } = location ?? {};
+    if (
+      typeof orderId !== 'string' ||
+      orderId.length === 0 ||
+      typeof latitude !== 'number' ||
+      typeof longitude !== 'number' ||
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      latitude < -90 || latitude > 90 ||
+      longitude < -180 || longitude > 180
+    ) {
+      throw new WsException('Invalid location payload');
+    }
+
     const [order] = await this.db
       .select()
       .from(schema.orders)
       .where(
         and(
-          eq(schema.orders.id, location.orderId),
+          eq(schema.orders.id, orderId),
           eq(schema.orders.driverId, driverId),
         ),
       );
 
     if (!order) {
       throw new ForbiddenException('You are not assigned to this order');
-    }
-
-    const { latitude, longitude } = location;
-    if (
-      typeof latitude !== 'number' || typeof longitude !== 'number' ||
-      !Number.isFinite(latitude) || !Number.isFinite(longitude) ||
-      latitude < -90 || latitude > 90 ||
-      longitude < -180 || longitude > 180
-    ) {
-      throw new ForbiddenException('Invalid coordinates');
-    }
+    };
 
     // persist so late-joining customers see current position
     await this.locationService.saveDriverLocation(
